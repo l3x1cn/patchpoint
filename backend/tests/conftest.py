@@ -69,3 +69,29 @@ def login_as(app: FastAPI, client: TestClient) -> Iterator[Callable[..., TestCli
 
     for session_client in clients:
         session_client.close()
+
+
+@pytest.fixture
+def ticket_factory() -> Callable[..., int]:
+    def create(
+        client: TestClient,
+        *,
+        title: str = "Laptop się przegrzewa",
+        description: str = "Wentylator pracuje głośno, obudowa jest gorąca.",
+        category: str = "laptop",
+        priority: str = "high",
+    ) -> int:
+        response = client.post(
+            "/api/tickets",
+            json={
+                "title": title,
+                "description": description,
+                "category": category,
+                "priority": priority,
+            },
+        )
+        assert response.status_code == 201
+        ticket_id: int = response.json()["id"]
+        return ticket_id
+
+    return create

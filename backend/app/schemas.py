@@ -47,3 +47,76 @@ class HealthResponse(BaseModel):
     database: str
     sqlite_version: str
     python_version: str
+
+
+class TicketCategory(StrEnum):
+    LAPTOP = "laptop"
+    DESKTOP = "desktop"
+    MONITOR = "monitor"
+    PRINTER = "printer"
+    PERIPHERAL = "peripheral"
+    NETWORK = "network"
+    OTHER = "other"
+
+
+class TicketPriority(StrEnum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class TicketStatus(StrEnum):
+    OPEN = "open"
+    IN_PROGRESS = "in_progress"
+    RESOLVED = "resolved"
+    CLOSED = "closed"
+
+
+class TicketCreate(BaseModel):
+    title: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    category: TicketCategory
+    priority: TicketPriority = TicketPriority.MEDIUM
+    asset_tag: str | None = None
+    location: str | None = None
+
+
+class TicketUpdate(BaseModel):
+    status: TicketStatus | None = None
+    priority: TicketPriority | None = None
+    assignee_id: int | None = None
+
+
+class TicketResponse(BaseModel):
+    id: int
+    title: str
+    description: str
+    category: TicketCategory
+    priority: TicketPriority
+    status: TicketStatus
+    asset_tag: str | None
+    location: str | None
+    reporter_id: int
+    reporter_name: str
+    assignee_id: int | None
+    assignee_name: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CommentCreate(BaseModel):
+    body: str = Field(min_length=1)
+
+
+class CommentResponse(BaseModel):
+    id: int
+    ticket_id: int
+    author_id: int
+    author_name: str
+    body: str
+    created_at: datetime
+
+
+class TicketDetailResponse(TicketResponse):
+    comments: list[CommentResponse]

@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
 
-from app.schemas import Role
+from app.schemas import Role, TicketCategory, TicketPriority, TicketStatus
 from app.security import hash_password
 
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
@@ -83,6 +83,50 @@ def create_user(
     )
 
 
+def insert_demo_ticket(
+    conn: sqlite3.Connection,
+    *,
+    title: str,
+    description: str,
+    category: TicketCategory,
+    priority: TicketPriority,
+    status: TicketStatus,
+    asset_tag: str,
+    location: str,
+    reporter_username: str,
+    assignee_username: str | None,
+) -> int:
+    reporter = fetch_one(conn, "SELECT id FROM users WHERE username = ?", (reporter_username,))
+    assignee = (
+        fetch_one(conn, "SELECT id FROM users WHERE username = ?", (assignee_username,))
+        if assignee_username
+        else None
+    )
+    if reporter is None:
+        raise ValueError(f"Unknown demo user: {reporter_username}")
+
+    now = utc_now_iso()
+    return execute(
+        conn,
+        "INSERT INTO tickets (title, description, category, priority, status, asset_tag, "
+        "location, reporter_id, assignee_id, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            title,
+            description,
+            category.value,
+            priority.value,
+            status.value,
+            asset_tag,
+            location,
+            reporter["id"],
+            assignee["id"] if assignee else None,
+            now,
+            now,
+        ),
+    )
+
+
 def seed_demo_data(conn: sqlite3.Connection) -> None:
     row = fetch_one(conn, "SELECT COUNT(*) AS n FROM users")
     if row is None or row["n"] != 0:
@@ -97,6 +141,57 @@ def seed_demo_data(conn: sqlite3.Connection) -> None:
             department=department,
             role=role,
         )
+
+    insert_demo_ticket(
+        conn,
+        title="Laptop nie uruchamia się po aktualizacji",
+        description="Po nocnej aktualizacji systemu laptop zatrzymuje się na logo producenta.",
+        category=TicketCategory.LAPTOP,
+        priority=TicketPriority.HIGH,
+        status=TicketStatus.OPEN,
+        asset_tag="LAP-0042",
+        location="B-204",
+        reporter_username="jan.kowalski",
+        assignee_username=None,
+    )
+    printer_ticket_id = insert_demo_ticket(
+        conn,
+        title="Drukarka zacina papier",
+        description="Drukarka sieciowa na 2. piętrze zacina papier przy druku dwustronnym.",
+        category=TicketCategory.PRINTER,
+        priority=TicketPriority.MEDIUM,
+        status=TicketStatus.IN_PROGRESS,
+        asset_tag="PRN-0007",
+        location="Korytarz, 2. piętro",
+        reporter_username="jan.kowalski",
+        assignee_username="helpdesk",
+    )
+    insert_demo_ticket(
+        conn,
+        title="Migający monitor",
+        description="Monitor zewnętrzny miga co kilka sekund po podłączeniu przez HDMI.",
+        category=TicketCategory.MONITOR,
+        priority=TicketPriority.LOW,
+        status=TicketStatus.OPEN,
+        asset_tag="MON-0113",
+        location="C-012",
+        reporter_username="anna.nowak",
+        assignee_username=None,
+    )
+
+    helpdesk = fetch_one(conn, "SELECT id FROM users WHERE username = ?", ("helpdesk",))
+    if helpdesk is None:
+        raise ValueError("Unknown demo user: helpdesk")
+    execute(
+        conn,
+        "INSERT INTO comments (ticket_id, author_id, body, created_at) VALUES (?, ?, ?, ?)",
+        (
+            printer_ticket_id,
+            helpdesk["id"],
+            "Zamówiono nowy podajnik papieru, wymiana planowana na piątek.",
+            utc_now_iso(),
+        ),
+    )
 
 
 def init_db(database_path: Path, *, with_demo_data: bool) -> None:

@@ -7,7 +7,7 @@ from fastapi import Depends, HTTPException, Request
 
 from app.config import Settings
 from app.database import connect, fetch_one
-from app.schemas import UserResponse
+from app.schemas import Role, UserResponse
 from app.security import SESSION_COOKIE_NAME
 
 BEARER_PREFIX = "Bearer "
@@ -51,3 +51,13 @@ async def get_current_user(request: Request, conn: DbConnection) -> UserResponse
 
 
 type CurrentUser = Annotated[UserResponse, Depends(get_current_user)]
+
+
+async def require_agent(user: CurrentUser) -> UserResponse:
+    if user.role != Role.AGENT:
+        raise HTTPException(status_code=403, detail="Helpdesk agent role required")
+
+    return user
+
+
+type AgentUser = Annotated[UserResponse, Depends(require_agent)]

@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import APP_VERSION, Settings
 from app.database import DatabaseError, init_db
-from app.routers import auth, health
+from app.routers import auth, health, tickets
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -47,6 +47,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(auth.router)
+    app.include_router(tickets.router)
 
     return app
 
