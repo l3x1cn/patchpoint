@@ -2,8 +2,9 @@ BACKEND := backend
 API_HOST ?= 127.0.0.1
 API_PORT ?= 8000
 FRONTEND_PORT ?= 5500
+API_URL ?= http://$(API_HOST):$(API_PORT)
 
-.PHONY: install run test lint format typecheck frontend
+.PHONY: install run test lint format typecheck frontend demo
 
 install:
 	cd $(BACKEND) && uv sync
@@ -25,3 +26,6 @@ typecheck:
 
 frontend:
 	python3 -m http.server $(FRONTEND_PORT) --bind 127.0.0.1 --directory frontend
+
+demo:
+	API_URL=$(API_URL) ./scripts/demo.sh
