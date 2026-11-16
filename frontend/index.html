@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PatchPoint — Helpdesk IT</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header>
+    <div class="container header-inner">
+      <div>
+        <h1>PatchPoint</h1>
+        <p class="subtitle">System zgłoszeń awarii sprzętu IT</p>
+      </div>
+      <div id="user-bar" hidden>
+        <span id="user-info"></span>
+        <button type="button" id="logout-button">Wyloguj</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div id="message" role="status"></div>
+
+    <section id="auth-view">
+      <div class="auth-grid">
+        <form id="login-form" class="card">
+          <h2>Logowanie</h2>
+          <label>Login
+            <input type="text" name="username" required autocomplete="username">
+          </label>
+          <label>Hasło
+            <input type="password" name="password" required autocomplete="current-password">
+          </label>
+          <button type="submit">Zaloguj</button>
+        </form>
+
+        <form id="register-form" class="card">
+          <h2>Rejestracja</h2>
+          <label>Login
+            <input type="text" name="username" required minlength="3" maxlength="50">
+          </label>
+          <label>Imię i nazwisko
+            <input type="text" name="full_name" required>
+          </label>
+          <label>Dział
+            <input type="text" name="department">
+          </label>
+          <label>Hasło
+            <input type="password" name="password" autocomplete="new-password">
+          </label>
+          <button type="submit">Zarejestruj konto</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="app-view" hidden>
+      <form id="ticket-form" class="card">
+        <h2>Nowe zgłoszenie</h2>
+        <div class="form-grid">
+          <label>Tytuł
+            <input type="text" name="title" required>
+          </label>
+          <label>Kategoria
+            <select name="category">
+              <option value="laptop">Laptop</option>
+              <option value="desktop">Komputer stacjonarny</option>
+              <option value="monitor">Monitor</option>
+              <option value="printer">Drukarka</option>
+              <option value="peripheral">Urządzenie peryferyjne</option>
+              <option value="network">Sieć</option>
+              <option value="other">Inne</option>
+            </select>
+          </label>
+          <label>Priorytet
+            <select name="priority">
+              <option value="low">Niski</option>
+              <option value="medium" selected>Średni</option>
+              <option value="high">Wysoki</option>
+              <option value="critical">Krytyczny</option>
+            </select>
+          </label>
+          <label>Nr inwentarzowy
+            <input type="text" name="asset_tag">
+          </label>
+          <label>Lokalizacja
+            <input type="text" name="location">
+          </label>
+        </div>
+        <label>Opis
+          <textarea name="description" rows="4" required></textarea>
+        </label>
+        <button type="submit">Wyślij zgłoszenie</button>
+      </form>
+
+      <section class="card">
+        <h2>Zgłoszenia</h2>
+        <form id="filter-form" class="filter-form">
+          <label>Status
+            <select name="status">
+              <option value="">Wszystkie</option>
+              <option value="open">Otwarte</option>
+              <option value="in_progress">W realizacji</option>
+              <option value="resolved">Rozwiązane</option>
+              <option value="closed">Zamknięte</option>
+            </select>
+          </label>
+          <label>Szukaj
+            <input type="text" name="search">
+          </label>
+          <button type="submit">Filtruj</button>
+        </form>
+
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Tytuł</th>
+              <th>Kategoria</th>
+              <th>Priorytet</th>
+              <th>Status</th>
+              <th>Zgłaszający</th>
+              <th>Przypisany</th>
+              <th>Utworzono</th>
+            </tr>
+          </thead>
+          <tbody id="ticket-list"></tbody>
+        </table>
+      </section>
+
+      <section id="ticket-detail" class="card" hidden></section>
+    </section>
+  </main>
+</body>
+</html>
