@@ -1,16 +1,10 @@
-from collections.abc import Callable
-from pathlib import Path
-
 import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings
 from app.main import create_app
 from app.schemas import Role
-
-LoginAs = Callable[..., TestClient]
-UserFactory = Callable[..., int]
-TicketFactory = Callable[..., int]
+from tests.support import API_BASE_URL, DEMO_PASSWORD, LoginAs, TicketFactory, UserFactory
 
 
 def patch_status(agent: TestClient, ticket_id: int, status: str) -> int:
@@ -325,19 +319,21 @@ class TestComments:
 
 
 class TestSeededTickets:
-    def test_demo_tickets(self, tmp_path: Path) -> None:
-        settings = Settings(database_path=tmp_path / "seed.db", seed_demo_data=True)
-
-        with TestClient(create_app(settings)) as seeded:
-            seeded.post(
-                "/api/auth/login", json={"username": "jan.kowalski", "password": "password123"}
+    def test_demo_tickets(self, seeded_settings: Settings) -> None:
+        with TestClient(create_app(seeded_settings), base_url=API_BASE_URL) as seeded:
+            jan_login = seeded.post(
+                "/api/auth/login", json={"username": "jan.kowalski", "password": DEMO_PASSWORD}
             )
             jan_tickets = seeded.get("/api/tickets").json()
-            seeded.post("/api/auth/login", json={"username": "helpdesk", "password": "helpdesk123"})
+            agent_login = seeded.post(
+                "/api/auth/login", json={"username": "helpdesk", "password": DEMO_PASSWORD}
+            )
             all_tickets = seeded.get("/api/tickets").json()
             printer = next(t for t in all_tickets if t["title"] == "Drukarka zacina papier")
             detail = seeded.get(f"/api/tickets/{printer['id']}").json()
 
+        assert jan_login.status_code == 200
+        assert agent_login.status_code == 200
         assert len(jan_tickets) == 2
         assert len(all_tickets) == 3
         assert detail["status"] == "in_progress"

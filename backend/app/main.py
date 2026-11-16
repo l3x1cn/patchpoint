@@ -44,7 +44,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-        init_db(settings.database_path, with_demo_data=settings.seed_demo_data)
+        demo_password = (
+            settings.demo_password.get_secret_value()
+            if settings.seed_demo_data and settings.demo_password is not None
+            else None
+        )
+        init_db(settings.database_path, demo_password=demo_password)
         yield
 
     docs_url = "/docs" if settings.docs_enabled else None

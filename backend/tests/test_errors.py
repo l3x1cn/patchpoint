@@ -2,7 +2,6 @@ import json
 import logging
 import re
 import sqlite3
-from collections.abc import Callable
 from contextlib import closing
 
 import pytest
@@ -10,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.config import Settings
+from tests.support import DEFAULT_PASSWORD, UserFactory
 
 ERROR_ID_PATTERN = re.compile(r"[0-9a-f]{32}")
 
@@ -17,7 +17,7 @@ ERROR_ID_PATTERN = re.compile(r"[0-9a-f]{32}")
 def test_database_error_returns_generic_body_and_logs_details(
     client: TestClient,
     settings: Settings,
-    user_factory: Callable[..., int],
+    user_factory: UserFactory,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     user_factory("alice")
@@ -25,7 +25,9 @@ def test_database_error_returns_generic_body_and_logs_details(
         conn.execute("DROP TABLE sessions")
         conn.commit()
 
-    response = client.post("/api/auth/login", json={"username": "alice", "password": "Secret123!"})
+    response = client.post(
+        "/api/auth/login", json={"username": "alice", "password": DEFAULT_PASSWORD}
+    )
 
     assert response.status_code == 500
     body = response.json()
