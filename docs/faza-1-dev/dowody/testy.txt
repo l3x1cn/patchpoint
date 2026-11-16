@@ -1,0 +1,35 @@
+cd backend && uv run pytest
+============================= test session starts ==============================
+platform linux -- Python 3.14.9, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/lex/Projects/patchpoint/backend
+configfile: pyproject.toml
+testpaths: tests
+plugins: cov-7.1.0, anyio-4.16.0
+collected 46 items
+
+tests/test_auth.py ............                                          [ 26%]
+tests/test_cors.py .                                                     [ 28%]
+tests/test_errors.py .                                                   [ 30%]
+tests/test_health.py .                                                   [ 32%]
+tests/test_tickets.py ...............................                    [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.14.9-final-0 ________________
+
+Name                      Stmts   Miss  Cover   Missing
+-------------------------------------------------------
+app/__init__.py               0      0   100%
+app/config.py                 9      0   100%
+app/database.py              71      6    92%   45-46, 55-56, 106, 184
+app/dependencies.py          35      1    97%   35
+app/main.py                  27      0   100%
+app/routers/__init__.py       0      0   100%
+app/routers/auth.py          37      3    92%   35, 39, 48
+app/routers/health.py        11      0   100%
+app/routers/tickets.py       81      3    96%   68, 153, 176
+app/schemas.py               49      0   100%
+app/security.py              10      0   100%
+-------------------------------------------------------
+TOTAL                       330     13    96%
+Required test coverage of 80% reached. Total coverage: 96.06%
+============================== 46 passed in 1.02s ==============================

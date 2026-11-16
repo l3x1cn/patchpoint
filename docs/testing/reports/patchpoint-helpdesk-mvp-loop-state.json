@@ -1,0 +1,1167 @@
+{
+  "plan_sha256": "56cfadb25247e095350dd001e9c5be7cbab121ce964550a24fe8d1dd0d329186",
+  "plan_path": "docs/testing/plans/2026-11-16-patchpoint-helpdesk-mvp-test-plan.md",
+  "report_file": "docs/testing/reports/2026-11-16-patchpoint-helpdesk-mvp-report.md",
+  "topic": "patchpoint-helpdesk-mvp",
+  "run_id": "e2063ec6",
+  "baseline": {
+    "BE-01": "pass",
+    "BE-02": "pass",
+    "BE-03": "pass",
+    "BE-04": "pass",
+    "BE-05": "pass",
+    "BE-06": "pass",
+    "BE-07": "pass",
+    "BE-08": "pass",
+    "BE-09": "pass",
+    "BE-10": "pass",
+    "BE-11": "pass",
+    "BE-12": "pass",
+    "BE-13": "pass",
+    "BE-14": "pass",
+    "BE-15": "pass",
+    "BE-16": "pass",
+    "BE-17": "pass",
+    "BE-18": "pass",
+    "BE-19": "pass",
+    "BE-20": "pass",
+    "BE-21": "pass",
+    "FE-01": "pass",
+    "FE-02": "pass",
+    "FE-03": "pass",
+    "FE-04": "pass",
+    "FE-05": "pass",
+    "FE-06": "pass",
+    "FE-07": "pass",
+    "FE-08": "pass",
+    "FE-09": "pass",
+    "FE-10": "pass"
+  },
+  "current": {
+    "BE-01": "pass",
+    "BE-02": "pass",
+    "BE-03": "pass",
+    "BE-04": "pass",
+    "BE-05": "pass",
+    "BE-06": "pass",
+    "BE-07": "pass",
+    "BE-08": "pass",
+    "BE-09": "pass",
+    "BE-10": "pass",
+    "BE-11": "pass",
+    "BE-12": "pass",
+    "BE-13": "pass",
+    "BE-14": "pass",
+    "BE-15": "pass",
+    "BE-16": "pass",
+    "BE-17": "pass",
+    "BE-18": "pass",
+    "BE-19": "pass",
+    "BE-20": "pass",
+    "BE-21": "pass",
+    "FE-01": "pass",
+    "FE-02": "pass",
+    "FE-03": "pass",
+    "FE-04": "pass",
+    "FE-05": "pass",
+    "FE-06": "pass",
+    "FE-07": "pass",
+    "FE-08": "pass",
+    "FE-09": "pass",
+    "FE-10": "pass"
+  },
+  "assertions": {
+    "BE-01": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-01 (edge 1)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-01 (edge 2)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-02": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-02 (edge 1)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-02 (edge 2)": {
+      "result": "PASS",
+      "observed_status": 401,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-03": {
+      "result": "PASS",
+      "observed_status": 201,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-03 (edge 1)": {
+      "result": "PASS",
+      "observed_status": 409,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-03 (edge 2)": {
+      "result": "PASS",
+      "observed_status": 422,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-03 (edge 3)": {
+      "result": "PASS",
+      "observed_status": 422,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-03 (edge 4)": {
+      "result": "PASS",
+      "observed_status": 422,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-03 (edge 5)": {
+      "result": "PASS",
+      "observed_status": 422,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-04": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-04 (edge 1)": {
+      "result": "PASS",
+      "observed_status": 401,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-04 (edge 2)": {
+      "result": "PASS",
+      "observed_status": 404,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-04 (edge 3)": {
+      "result": "PASS",
+      "observed_status": 422,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-05": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-05 (edge 1)": {
+      "result": "PASS",
+      "observed_status": 401,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-05 (edge 2)": {
+      "result": "PASS",
+      "observed_status": 401,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-05 (edge 3)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-06": {
+      "result": "PASS",
+      "observed_status": 201,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-06 (edge 1)": {
+      "result": "PASS",
+      "observed_status": 401,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-06 (edge 2)": {
+      "result": "PASS",
+      "observed_status": 201,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-06 (edge 3)": {
+      "result": "PASS",
+      "observed_status": 422,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-06 (edge 4)": {
+      "result": "PASS",
+      "observed_status": 422,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-06 (edge 5)": {
+      "result": "PASS",
+      "observed_status": 422,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-06 (edge 6)": {
+      "result": "PASS",
+      "observed_status": 422,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-07": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-07 (edge 1)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-07 (edge 2)": {
+      "result": "PASS",
+      "observed_status": 401,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-08": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-08 (edge 1)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-08 (edge 2)": {
+      "result": "PASS",
+      "observed_status": 422,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-09": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-09 (edge 1)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-09 (edge 2)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-09 (edge 3)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-10": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-10 (edge 1)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-10 (edge 2)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-11": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-11 (edge 1)": {
+      "result": "PASS",
+      "observed_status": 401,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-11 (edge 2)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-12": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-12 (edge 1)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-12 (edge 2)": {
+      "result": "PASS",
+      "observed_status": 422,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-13": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-13 (edge 1)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-13 (edge 2)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-14": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-14 (edge 1)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-14 (edge 2)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-15": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-15 (edge 1)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-15 (edge 2)": {
+      "result": "PASS",
+      "observed_status": 404,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-15 (edge 3)": {
+      "result": "PASS",
+      "observed_status": 422,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-15 (edge 4)": {
+      "result": "PASS",
+      "observed_status": 401,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-16": {
+      "result": "PASS",
+      "observed_status": 201,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-16 (edge 1)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-16 (edge 2)": {
+      "result": "PASS",
+      "observed_status": 201,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-16 (edge 3)": {
+      "result": "PASS",
+      "observed_status": 422,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-16 (edge 4)": {
+      "result": "PASS",
+      "observed_status": 404,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-16 (edge 5)": {
+      "result": "PASS",
+      "observed_status": 401,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-17": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-17 (edge 1)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-17 (edge 2)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-17 (edge 3)": {
+      "result": "PASS",
+      "observed_status": 400,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-17 (edge 4)": {
+      "result": "PASS",
+      "observed_status": 400,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-17 (edge 5)": {
+      "result": "PASS",
+      "observed_status": 400,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-17 (edge 6)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-18": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-18 (edge 1)": {
+      "result": "PASS",
+      "observed_status": 400,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-18 (edge 2)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-18 (edge 3)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-18 (edge 4)": {
+      "result": "PASS",
+      "observed_status": 400,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-18 (edge 5)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-18 (edge 6)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-18 (edge 7)": {
+      "result": "PASS",
+      "observed_status": 400,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-18 (edge 8)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-19": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-19 (edge 1)": {
+      "result": "PASS",
+      "observed_status": 400,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-19 (edge 2)": {
+      "result": "PASS",
+      "observed_status": 400,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-19 (edge 3)": {
+      "result": "PASS",
+      "observed_status": 400,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-19 (edge 4)": {
+      "result": "PASS",
+      "observed_status": 404,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-19 (edge 5)": {
+      "result": "PASS",
+      "observed_status": 400,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-19 (edge 6)": {
+      "result": "PASS",
+      "observed_status": 400,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-19 (edge 7)": {
+      "result": "PASS",
+      "observed_status": 400,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-19 (edge 8)": {
+      "result": "PASS",
+      "observed_status": 422,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-19 (edge 9)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-19 (edge 10)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-19 (edge 11)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-19 (edge 12)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-19 (edge 13)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-20": {
+      "result": "PASS",
+      "observed_status": 403,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-20 (edge 1)": {
+      "result": "PASS",
+      "observed_status": 401,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-20 (edge 2)": {
+      "result": "PASS",
+      "observed_status": 403,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-20 (edge 3)": {
+      "result": "PASS",
+      "observed_status": 403,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-21": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-21 (edge 1)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "BE-21 (edge 2)": {
+      "result": "PASS",
+      "observed_status": 200,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-01": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-01 (edge 1)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-01 (edge 2)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-02": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-02 (edge 1)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-02 (edge 2)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-02 (edge 3)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-03": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-03 (edge 1)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-03 (edge 2)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-03 (edge 3)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-03 (edge 4)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-04": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-04 (edge 1)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-04 (edge 2)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-04 (edge 3)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-05": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-05 (edge 1)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-05 (edge 2)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-05 (edge 3)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-06": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-06 (edge 1)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-06 (edge 2)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-07": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-07 (edge 1)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-07 (edge 2)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-08": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-08 (edge 1)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-08 (edge 2)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-09": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-09 (edge 1)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-09 (edge 2)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-10": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-10 (edge 1)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-10 (edge 2)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    },
+    "FE-10 (edge 3)": {
+      "result": "PASS",
+      "observed_status": null,
+      "crash": false,
+      "auth": false,
+      "refutation": null
+    }
+  },
+  "pre_loop_dirty": [],
+  "pre_loop": {},
+  "fix_touched_files": [],
+  "dispatch_count": 2,
+  "dispatches": {
+    "D001": {
+      "kind": "tester",
+      "section": "BE",
+      "phase": "baseline",
+      "scenarios": [
+        "BE-01",
+        "BE-02",
+        "BE-03",
+        "BE-04",
+        "BE-05",
+        "BE-06",
+        "BE-07",
+        "BE-08",
+        "BE-09",
+        "BE-10",
+        "BE-11",
+        "BE-12",
+        "BE-13",
+        "BE-14",
+        "BE-15",
+        "BE-16",
+        "BE-17",
+        "BE-18",
+        "BE-19",
+        "BE-20",
+        "BE-21"
+      ],
+      "edges": {
+        "BE-01": 2,
+        "BE-02": 2,
+        "BE-03": 5,
+        "BE-04": 3,
+        "BE-05": 3,
+        "BE-06": 6,
+        "BE-07": 2,
+        "BE-08": 2,
+        "BE-09": 3,
+        "BE-10": 2,
+        "BE-11": 2,
+        "BE-12": 2,
+        "BE-13": 2,
+        "BE-14": 2,
+        "BE-15": 4,
+        "BE-16": 5,
+        "BE-17": 6,
+        "BE-18": 8,
+        "BE-19": 13,
+        "BE-20": 3,
+        "BE-21": 2
+      },
+      "guarded": [],
+      "tag": "9d01d873",
+      "iteration": null,
+      "ingested": true,
+      "time": 1794811071.8118892
+    },
+    "D002": {
+      "kind": "tester",
+      "section": "FE",
+      "phase": "baseline",
+      "scenarios": [
+        "FE-01",
+        "FE-02",
+        "FE-03",
+        "FE-04",
+        "FE-05",
+        "FE-06",
+        "FE-07",
+        "FE-08",
+        "FE-09",
+        "FE-10"
+      ],
+      "edges": {
+        "FE-01": 2,
+        "FE-02": 3,
+        "FE-03": 4,
+        "FE-04": 3,
+        "FE-05": 3,
+        "FE-06": 2,
+        "FE-07": 2,
+        "FE-08": 2,
+        "FE-09": 2,
+        "FE-10": 3
+      },
+      "guarded": [],
+      "tag": "507829ce",
+      "iteration": null,
+      "ingested": true,
+      "time": 1794811071.9764268
+    }
+  },
+  "iteration": 0,
+  "open_iteration": null,
+  "loop_end": null,
+  "iterations": [],
+  "created": "2026-11-16",
+  "scenario_issues": {},
+  "issue_assertion": {},
+  "scenario_kind": {
+    "BE-01": "feature",
+    "BE-02": "feature",
+    "BE-03": "feature",
+    "BE-04": "feature",
+    "BE-05": "feature",
+    "BE-06": "feature",
+    "BE-07": "feature",
+    "BE-08": "feature",
+    "BE-09": "feature",
+    "BE-10": "feature",
+    "BE-11": "feature",
+    "BE-12": "feature",
+    "BE-13": "feature",
+    "BE-14": "feature",
+    "BE-15": "feature",
+    "BE-16": "feature",
+    "BE-17": "feature",
+    "BE-18": "feature",
+    "BE-19": "feature",
+    "BE-20": "negative",
+    "BE-21": "feature",
+    "FE-01": "feature",
+    "FE-02": "feature",
+    "FE-03": "feature",
+    "FE-04": "feature",
+    "FE-05": "feature",
+    "FE-06": "feature",
+    "FE-07": "feature",
+    "FE-08": "feature",
+    "FE-09": "feature",
+    "FE-10": "feature"
+  },
+  "scenario_reason": {},
+  "unverified_issues": [],
+  "need_info": {},
+  "auto_generated": true
+}
