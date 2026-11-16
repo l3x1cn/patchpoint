@@ -8,6 +8,11 @@ for tool in curl jq; do
   fi
 done
 
+if [[ -z "${DEMO_PASSWORD:-}" ]]; then
+  echo "Ustaw DEMO_PASSWORD — hasło kont demo, takie samo jak PATCHPOINT_DEMO_PASSWORD uruchomionego API." >&2
+  exit 2
+fi
+
 API_URL="${API_URL:-http://127.0.0.1:8000}"
 WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
@@ -21,7 +26,7 @@ echo "Data: $(date -Iseconds)"
 # request <oczekiwany_status> <słoik> <METODA> <ścieżka> [json]
 request() {
   local expected="$1" jar="$2" method="$3" path="$4" payload="${5:-}"
-  local args=(-s -o "$BODY" -w '%{http_code}' -X "$method" -b "$WORKDIR/$jar.txt" -c "$WORKDIR/$jar.txt")
+  local args=(-s --noproxy '*' -o "$BODY" -w '%{http_code}' -X "$method" -b "$WORKDIR/$jar.txt" -c "$WORKDIR/$jar.txt")
   if [[ -n "$payload" ]]; then
     args+=(-H 'Content-Type: application/json' -d "$payload")
   fi
@@ -41,11 +46,11 @@ TICKET_TITLE="Stacja dokująca nie wykrywa monitorów"
 echo
 echo "==> Krok 1: Sprawdzenie stanu API"
 request 200 anon GET /api/health
-jq -r '"status: \(.status), wersja: \(.version)"' "$BODY"
+jq -r '"status: \(.status)"' "$BODY"
 
 echo
 echo "==> Krok 2: Logowanie pracownika jan.kowalski"
-request 200 jan POST /api/auth/login '{"username":"jan.kowalski","password":"password123"}'
+request 200 jan POST /api/auth/login "$(jq -n --arg u jan.kowalski --arg p "$DEMO_PASSWORD" '{username: $u, password: $p}')"
 jq -r '"Zalogowano: \(.user.full_name) (rola: \(.user.role))"' "$BODY"
 
 echo
@@ -66,7 +71,7 @@ jq -r '.[] | "#\(.id) [\(.status)] \(.title)"' "$BODY"
 
 echo
 echo "==> Krok 5: Logowanie agenta helpdesk"
-request 200 helpdesk POST /api/auth/login '{"username":"helpdesk","password":"helpdesk123"}'
+request 200 helpdesk POST /api/auth/login "$(jq -n --arg u helpdesk --arg p "$DEMO_PASSWORD" '{username: $u, password: $p}')"
 HELPDESK_ID=$(jq -r '.user.id' "$BODY")
 jq -r '"Zalogowano: \(.user.full_name) (rola: \(.user.role), id: \(.user.id))"' "$BODY"
 

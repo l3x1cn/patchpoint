@@ -4,7 +4,7 @@ API_PORT ?= 8000
 FRONTEND_PORT ?= 5500
 API_URL ?= http://$(API_HOST):$(API_PORT)
 
-.PHONY: install run test lint format typecheck frontend demo
+.PHONY: install run test lint format typecheck frontend demo security-check
 
 install:
 	cd $(BACKEND) && uv sync
@@ -29,3 +29,6 @@ frontend:
 
 demo:
 	API_URL=$(API_URL) ./scripts/demo.sh
+
+security-check:
+	API_URL=$(API_URL) ./scripts/security_check.sh
