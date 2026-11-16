@@ -19,10 +19,9 @@ DEMO_USERS: Final = (
 
 
 class DatabaseError(Exception):
-    def __init__(self, sql: str, params: Sequence[object], original: sqlite3.Error) -> None:
+    def __init__(self, sql: str, original: sqlite3.Error) -> None:
         super().__init__(str(original))
         self.sql = sql
-        self.params = params
         self.original = original
 
 
@@ -43,7 +42,7 @@ def fetch_one(
     try:
         row: sqlite3.Row | None = conn.execute(sql, params).fetchone()
     except sqlite3.Error as exc:
-        raise DatabaseError(sql, params, exc) from exc
+        raise DatabaseError(sql, exc) from exc
     return row
 
 
@@ -53,7 +52,7 @@ def fetch_all(
     try:
         rows: list[sqlite3.Row] = conn.execute(sql, params).fetchall()
     except sqlite3.Error as exc:
-        raise DatabaseError(sql, params, exc) from exc
+        raise DatabaseError(sql, exc) from exc
     return rows
 
 
@@ -62,7 +61,7 @@ def execute(conn: sqlite3.Connection, sql: str, params: Sequence[object] = ()) -
         cursor = conn.execute(sql, params)
         conn.commit()
     except sqlite3.Error as exc:
-        raise DatabaseError(sql, params, exc) from exc
+        raise DatabaseError(sql, exc) from exc
     return cursor.lastrowid or 0
 
 

@@ -43,10 +43,6 @@ class MessageResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
-    version: str
-    database: str
-    sqlite_version: str
-    python_version: str
 
 
 class TicketCategory(StrEnum):
