@@ -15,3 +15,4 @@ backend/data/
 .DS_Store
 .av/local.toml
 .av/secrets.local.env
+.av/run/
