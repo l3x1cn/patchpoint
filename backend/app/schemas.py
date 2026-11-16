@@ -1,7 +1,12 @@
 from datetime import datetime
 from enum import StrEnum
+from typing import Final, Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app.security import PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, password_policy_violation
+
+USERNAME_PATTERN: Final = r"^[A-Za-z0-9._@+-]+$"
 
 
 class Role(StrEnum):
@@ -10,11 +15,20 @@ class Role(StrEnum):
 
 
 class UserCreate(BaseModel):
-    username: str = Field(min_length=3, max_length=50)
-    password: str
-    full_name: str = Field(min_length=1)
-    department: str = ""
-    role: Role = Role.EMPLOYEE
+    model_config = ConfigDict(extra="forbid")
+
+    username: str = Field(min_length=3, max_length=50, pattern=USERNAME_PATTERN)
+    password: str = Field(min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
+    full_name: str = Field(min_length=1, max_length=100)
+    department: str = Field(default="", max_length=100)
+
+    @model_validator(mode="after")
+    def enforce_password_policy(self) -> Self:
+        violation = password_policy_violation(self.password, self.username)
+        if violation is not None:
+            raise ValueError(violation)
+
+        return self
 
 
 class UserResponse(BaseModel):
@@ -24,16 +38,16 @@ class UserResponse(BaseModel):
     department: str
     role: Role
     created_at: datetime
-    password_hash: str
 
 
 class LoginRequest(BaseModel):
-    username: str
-    password: str
+    model_config = ConfigDict(extra="forbid")
+
+    username: str = Field(min_length=1, max_length=50)
+    password: str = Field(min_length=1, max_length=PASSWORD_MAX_LENGTH)
 
 
 class LoginResponse(BaseModel):
-    token: str
     user: UserResponse
 
 

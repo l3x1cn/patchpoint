@@ -2,7 +2,7 @@ from typing import Final
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.database import execute, fetch_all, fetch_one, utc_now_iso
+from app.database import fetch_all, fetch_one, run, transaction, utc_now_iso
 from app.dependencies import CurrentUser, DbConnection, get_current_user, require_agent
 from app.schemas import (
     CommentCreate,
@@ -45,23 +45,24 @@ async def create_ticket(
     payload: TicketCreate, user: CurrentUser, conn: DbConnection
 ) -> TicketResponse:
     now = utc_now_iso()
-    ticket_id = execute(
-        conn,
-        "INSERT INTO tickets (title, description, category, priority, status, asset_tag, "
-        "location, reporter_id, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?)",
-        (
-            payload.title,
-            payload.description,
-            payload.category.value,
-            payload.priority.value,
-            payload.asset_tag,
-            payload.location,
-            user.id,
-            now,
-            now,
-        ),
-    )
+    with transaction(conn):
+        ticket_id = run(
+            conn,
+            "INSERT INTO tickets (title, description, category, priority, status, asset_tag, "
+            "location, reporter_id, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?)",
+            (
+                payload.title,
+                payload.description,
+                payload.category.value,
+                payload.priority.value,
+                payload.asset_tag,
+                payload.location,
+                user.id,
+                now,
+                now,
+            ),
+        )
 
     row = fetch_one(conn, f"{TICKET_SELECT} WHERE t.id = ?", (ticket_id,))
     if row is None:
@@ -146,7 +147,8 @@ async def update_ticket(
     assignments.append("updated_at = ?")
     params.extend([utc_now_iso(), ticket_id])
 
-    execute(conn, f"UPDATE tickets SET {', '.join(assignments)} WHERE id = ?", params)
+    with transaction(conn):
+        run(conn, f"UPDATE tickets SET {', '.join(assignments)} WHERE id = ?", params)
 
     row = fetch_one(conn, f"{TICKET_SELECT} WHERE t.id = ?", (ticket_id,))
     if row is None:
@@ -164,12 +166,13 @@ async def add_comment(
         raise HTTPException(status_code=404, detail="Ticket not found")
 
     now = utc_now_iso()
-    comment_id = execute(
-        conn,
-        "INSERT INTO comments (ticket_id, author_id, body, created_at) VALUES (?, ?, ?, ?)",
-        (ticket_id, user.id, payload.body, now),
-    )
-    execute(conn, "UPDATE tickets SET updated_at = ? WHERE id = ?", (now, ticket_id))
+    with transaction(conn):
+        comment_id = run(
+            conn,
+            "INSERT INTO comments (ticket_id, author_id, body, created_at) VALUES (?, ?, ?, ?)",
+            (ticket_id, user.id, payload.body, now),
+        )
+        run(conn, "UPDATE tickets SET updated_at = ? WHERE id = ?", (now, ticket_id))
 
     row = fetch_one(conn, f"{COMMENT_SELECT} WHERE c.id = ?", (comment_id,))
     if row is None:

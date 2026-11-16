@@ -9,10 +9,21 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
-    token      TEXT    PRIMARY KEY,
-    user_id    INTEGER NOT NULL REFERENCES users(id),
-    created_at TEXT    NOT NULL
+    token_hash   TEXT    PRIMARY KEY,
+    user_id      INTEGER NOT NULL REFERENCES users(id),
+    created_at   TEXT    NOT NULL,
+    last_seen_at TEXT    NOT NULL,
+    expires_at   TEXT    NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS login_failures (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    username     TEXT    NOT NULL,
+    attempted_at TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_login_failures_username
+    ON login_failures (username, attempted_at);
 
 CREATE TABLE IF NOT EXISTS tickets (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,3 +47,5 @@ CREATE TABLE IF NOT EXISTS comments (
     body       TEXT    NOT NULL,
     created_at TEXT    NOT NULL
 );
+
+PRAGMA user_version = 2;
