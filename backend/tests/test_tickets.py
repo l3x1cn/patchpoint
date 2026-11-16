@@ -282,6 +282,25 @@ class TestUpdateTicket:
 
         assert response.status_code == 404
 
+    def test_partial_update_keeps_other_fields(
+        self, user_factory: UserFactory, login_as: LoginAs, ticket_factory: TicketFactory
+    ) -> None:
+        user_factory("jan")
+        agent_id = user_factory("agent", role=Role.AGENT)
+        ticket_id = ticket_factory(login_as("jan"))
+        agent = login_as("agent")
+        assert patch_status(agent, ticket_id, "in_progress") == 200
+        assigned = agent.patch(f"/api/tickets/{ticket_id}", json={"assignee_id": agent_id})
+        assert assigned.status_code == 200
+
+        response = agent.patch(f"/api/tickets/{ticket_id}", json={"priority": "low"})
+
+        body = response.json()
+        assert response.status_code == 200
+        assert body["priority"] == "low"
+        assert body["status"] == "in_progress"
+        assert body["assignee_id"] == agent_id
+
 
 class TestComments:
     def test_add_comment(
@@ -316,6 +335,20 @@ class TestComments:
         response = jan.post(f"/api/tickets/{ticket_id}/comments", json={"body": ""})
 
         assert response.status_code == 422
+
+    def test_add_comment_updates_ticket_timestamp(
+        self, user_factory: UserFactory, login_as: LoginAs, ticket_factory: TicketFactory
+    ) -> None:
+        user_factory("jan")
+        jan = login_as("jan")
+        ticket_id = ticket_factory(jan)
+        before = jan.get(f"/api/tickets/{ticket_id}").json()["updated_at"]
+
+        response = jan.post(f"/api/tickets/{ticket_id}/comments", json={"body": "Pilne"})
+
+        after = jan.get(f"/api/tickets/{ticket_id}").json()["updated_at"]
+        assert response.status_code == 201
+        assert after >= before
 
 
 class TestSeededTickets:
