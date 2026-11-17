@@ -96,26 +96,26 @@ Stan Fazy 1, przepisany z routerów `health`, `auth` i `tickets`.
 
 Kryterium: znalezisko jest „potwierdzone”, gdy kod we wskazanym miejscu ma opisane zachowanie. Dla RT-06 i RT-13 dochodzą fakty z uruchomienia bibliotek, opisane w tabeli. Numery linii sprawdzono w drzewie `ab08633`.
 
-| RT | Tytuł (skrót) | Ważność (audyt) | Werdykt | Dowód w kodzie | Pozycja rejestru | Wektor scenariusza | Priorytet |
-|---|---|---|---|---|---|---|---|
-| RT-01 | SQL injection w `search` | krytyczna | potwierdzona | `backend/app/routers/tickets.py:86` (f-string z `search`), `:89` (`fetch_all` bez parametrów) | W-14 | Information Disclosure (łańcuch z W-01) | P1 |
-| RT-02 | rejestracja z rolą `agent` | krytyczna | potwierdzona | `backend/app/schemas.py:17`, `backend/app/routers/auth.py:28` | W-15 | Broken Authentication | P1 |
-| RT-03 | przewidywalny token | krytyczna | potwierdzona | `backend/app/security.py:17`, `backend/app/dependencies.py:33-37` (Bearer) | W-08 (i Bearer z W-11) | Broken Authentication | P1 |
-| RT-04 | IDOR | wysoka | potwierdzona | `backend/app/routers/tickets.py:94-105`, `:158-164` | W-16 | Information Disclosure | P1 |
-| RT-05 | stored XSS | wysoka | potwierdzona | `frontend/app.js:100`, `:110-122`, `:172-207` | W-17 | Broken Authentication (kradzież sesji) | P1 |
-| RT-06 | CORS `*` z credentials | wysoka | potwierdzona; pewność audytu „średnia” podniesiona, bo Starlette 1.10 odbija `Origin` (`starlette/middleware/cors.py:163-164`), co potwierdziła też weryfikacja Fazy 1 (preflight z `Origin: http://evil.example`) | `backend/app/main.py:26-32` | W-13 | CORS | P1 |
-| RT-07 | cykl życia sesji | wysoka | potwierdzona | `backend/app/routers/auth.py:58`, `:60`, `:64-66`; `backend/app/schema.sql:11-15`; `backend/app/dependencies.py:33-48` | W-09, W-10, W-11 | Broken Authentication | P1 |
-| RT-08 | MD5 bez soli | wysoka | potwierdzona | `backend/app/security.py:8-13` | W-07 | Broken Authentication | P1 |
-| RT-09 | konta domyślne, brak polityki haseł | wysoka | potwierdzona | `backend/app/database.py:13-18`, `backend/app/config.py:14`, `backend/app/schemas.py:14`, `frontend/index.html:52` | W-12 (konta i polityka haseł) | Broken Authentication | P1 |
-| RT-10 | gadatliwe błędy bazy | średnia | potwierdzona | `backend/app/main.py:34-46`, `backend/app/database.py:21-27`, `backend/app/routers/auth.py:31-34`, `frontend/app.js:67` | W-01, W-02 | Information Disclosure | P2 |
-| RT-11 | `password_hash` w API | średnia | potwierdzona | `backend/app/schemas.py:27` | W-06 | Information Disclosure | P2 |
-| RT-12 | enumeracja i brak limitu prób | średnia | potwierdzona | `backend/app/routers/auth.py:46-50` | W-05, W-12 (limit prób) | Information Disclosure / Broken Authentication | P2 |
-| RT-13 | `debug=True`, publiczne `/docs` | średnia | potwierdzona. Wyzwalacz `OverflowError` sprawdzono uruchomieniem: `sqlite3` rzuca `OverflowError` (nie `sqlite3.Error`), a Pydantic przyjmuje `99999999999999999999`. To nowe znalezisko spoza rejestru | `backend/app/main.py:23` | W-03 (+ nowe) | Information Disclosure | P2 |
-| RT-14 | health | niska | potwierdzona | `backend/app/routers/health.py:13-23` | W-04 | Information Disclosure | P3 |
-| RT-15 | brak logowania | niska | potwierdzona | brak użycia `logging` w `backend/app` | W-18 | wykrywalność ataków | P3 |
-| RT-16 | brak CSP i nagłówków, HTTP | niska | potwierdzona dla CSP i nagłówków; część „HTTP bez TLS” poza zakresem Fazy 2 (Faza 3) | `frontend/index.html:3-9`, `backend/app/main.py:23-32` | spoza rejestru (SEC-021 w code review) | mitigacja XSS | P3 |
+| RT | Tytuł (skrót) | Ważność (audyt) | Werdykt | Dowód w kodzie | Pozycja rejestru | Wektor scenariusza | Priorytet | PoC (Faza 1 → Faza 2) |
+|---|---|---|---|---|---|---|---|---|
+| RT-01 | SQL injection w `search` | krytyczna | potwierdzona | `backend/app/routers/tickets.py:86` (f-string z `search`), `:89` (`fetch_all` bez parametrów) | W-14 | Information Disclosure (łańcuch z W-01) | P1 | W-14: PODATNE → NAPRAWIONE |
+| RT-02 | rejestracja z rolą `agent` | krytyczna | potwierdzona | `backend/app/schemas.py:17`, `backend/app/routers/auth.py:28` | W-15 | Broken Authentication | P1 | W-15: PODATNE → NAPRAWIONE |
+| RT-03 | przewidywalny token | krytyczna | potwierdzona | `backend/app/security.py:17`, `backend/app/dependencies.py:33-37` (Bearer) | W-08 (i Bearer z W-11) | Broken Authentication | P1 | W-08: PODATNE → NAPRAWIONE |
+| RT-04 | IDOR | wysoka | potwierdzona | `backend/app/routers/tickets.py:94-105`, `:158-164` | W-16 | Information Disclosure | P1 | W-16: PODATNE → NAPRAWIONE |
+| RT-05 | stored XSS | wysoka | potwierdzona | `frontend/app.js:100`, `:110-122`, `:172-207` | W-17 | Broken Authentication (kradzież sesji) | P1 | W-17: PODATNE → NAPRAWIONE |
+| RT-06 | CORS `*` z credentials | wysoka | potwierdzona; pewność audytu „średnia” podniesiona, bo Starlette 1.10 odbija `Origin` (`starlette/middleware/cors.py:163-164`), co potwierdziła też weryfikacja Fazy 1 (preflight z `Origin: http://evil.example`) | `backend/app/main.py:26-32` | W-13 | CORS | P1 | W-13: PODATNE → NAPRAWIONE |
+| RT-07 | cykl życia sesji | wysoka | potwierdzona | `backend/app/routers/auth.py:58`, `:60`, `:64-66`; `backend/app/schema.sql:11-15`; `backend/app/dependencies.py:33-48` | W-09, W-10, W-11 | Broken Authentication | P1 | W-09, W-10, W-11: PODATNE → NAPRAWIONE |
+| RT-08 | MD5 bez soli | wysoka | potwierdzona | `backend/app/security.py:8-13` | W-07 | Broken Authentication | P1 | W-07: PODATNE → NAPRAWIONE |
+| RT-09 | konta domyślne, brak polityki haseł | wysoka | potwierdzona | `backend/app/database.py:13-18`, `backend/app/config.py:14`, `backend/app/schemas.py:14`, `frontend/index.html:52` | W-12 (konta i polityka haseł) | Broken Authentication | P1 | W-12: PODATNE → NAPRAWIONE |
+| RT-10 | gadatliwe błędy bazy | średnia | potwierdzona | `backend/app/main.py:34-46`, `backend/app/database.py:21-27`, `backend/app/routers/auth.py:31-34`, `frontend/app.js:67` | W-01, W-02 | Information Disclosure | P2 | W-01, W-02: PODATNE → NAPRAWIONE |
+| RT-11 | `password_hash` w API | średnia | potwierdzona | `backend/app/schemas.py:27` | W-06 | Information Disclosure | P2 | W-06: PODATNE → NAPRAWIONE |
+| RT-12 | enumeracja i brak limitu prób | średnia | potwierdzona | `backend/app/routers/auth.py:46-50` | W-05, W-12 (limit prób) | Information Disclosure / Broken Authentication | P2 | W-05, W-12: PODATNE → NAPRAWIONE |
+| RT-13 | `debug=True`, publiczne `/docs` | średnia | potwierdzona. Wyzwalacz `OverflowError` sprawdzono uruchomieniem: `sqlite3` rzuca `OverflowError` (nie `sqlite3.Error`), a Pydantic przyjmuje `99999999999999999999`. To nowe znalezisko spoza rejestru | `backend/app/main.py:23` | W-03 (+ nowe) | Information Disclosure | P2 | W-03, RT-13: PODATNE → NAPRAWIONE |
+| RT-14 | health | niska | potwierdzona | `backend/app/routers/health.py:13-23` | W-04 | Information Disclosure | P3 | W-04: PODATNE → NAPRAWIONE |
+| RT-15 | brak logowania | niska | potwierdzona | brak użycia `logging` w `backend/app` | W-18 | wykrywalność ataków | P3 | W-18: PODATNE → NAPRAWIONE |
+| RT-16 | brak CSP i nagłówków, HTTP | niska | potwierdzona dla CSP i nagłówków; część „HTTP bez TLS” poza zakresem Fazy 2 (Faza 3) | `frontend/index.html:3-9`, `backend/app/main.py:23-32` | spoza rejestru (SEC-021 w code review) | mitigacja XSS | P3 | SEC-021, W-17: PODATNE → NAPRAWIONE |
 
-Priorytet P1 = ważność krytyczna lub wysoka, P2 = średnia, P3 = niska. Zespół nie zmienił żadnej oceny audytu.
+Priorytet P1 = ważność krytyczna lub wysoka, P2 = średnia, P3 = niska. Zespół nie zmienił żadnej oceny audytu. Wyniki PoC pochodzą z uruchomień `scripts/security_check.sh` na kodzie Fazy 1 ([`dowody/poc-faza-1.txt`](dowody/poc-faza-1.txt): 22 × `[PODATNE]`) i Fazy 2 ([`dowody/poc-faza-2.txt`](dowody/poc-faza-2.txt): 22 × `[NAPRAWIONE]`).
 
 ## 5. Porównanie z rejestrem słabości
 

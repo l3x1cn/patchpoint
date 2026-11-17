@@ -1,0 +1,29 @@
+PatchPoint — kontrola regresji bezpieczeństwa
+API_URL: http://127.0.0.1:8000
+FRONTEND_DIR: /tmp/tmp.kVsPTtPK5V/frontend
+Data: 2026-11-16T17:50:17+01:00
+
+[PODATNE] W-01 Gadatliwy błąd bazy — search=O'Brien daje HTTP 500; ciało ujawnia SQL lub traceback
+[PODATNE] W-02 Komunikat SQLite przy zajętym loginie — ponowna rejestracja daje HTTP 409; ciało ujawnia szczegóły bazy lub status ≠ 409
+[PODATNE] W-03 Tryb debug i publiczna dokumentacja API — dokumentacja dostępna: /docs=200 /redoc=200 /openapi.json=200
+[PODATNE] W-04 Szczegóły środowiska w /api/health — klucze odpowiedzi: database,python_version,sqlite_version,status,version
+[PODATNE] W-05 Enumeracja kont — nieznany login 404 vs złe hasło 401
+[PODATNE] W-06 Hash hasła w odpowiedzi API — /api/auth/me zwraca password_hash
+[PODATNE] W-07 Hasła MD5 bez soli — users.password_hash = md5(hasła), bez soli
+[PODATNE] W-08 Przewidywalny token sesji — token = md5(login:czas)
+[PODATNE] W-09 Sesje bez wygasania — brak Max-Age w Set-Cookie lub expires_at w sessions (kolumny: token user_id created_at)
+[PODATNE] W-10 Wylogowanie nie unieważnia sesji — po wylogowaniu (HTTP 200) stary token nadal daje HTTP 200
+[PODATNE] W-11 Ciasteczko bez flag, token w JSON i Bearer — problemy: brak-HttpOnly brak-Secure brak-SameSite=Strict token-w-JSON Bearer-HTTP-200
+[PODATNE] W-12 Konto domyślne, brak polityki haseł i limitu prób — admin/admin123=200 (oczekiwano 401 lub 429), puste hasło przy rejestracji=201 (422), szósta zła próba=401 (429)
+[PODATNE] W-13 CORS odbija dowolny Origin — preflight z Origin http://evil.example odbity (HTTP 200)
+[PODATNE] W-14 SQL injection w wyszukiwaniu — wstrzyknięty warunek zwrócił cudze zgłoszenie #5
+[PODATNE] W-15 Nadanie roli przy rejestracji — rejestracja z role=agent utworzyła agenta (HTTP 201)
+[PODATNE] W-16 IDOR na zgłoszeniach — cudze zgłoszenie: odczyt HTTP 200, komentarz HTTP 201
+[PODATNE] W-17 XSS przez innerHTML — problemy: innerHTML-w-app.js brak-CSP-w-index.html
+[PODATNE] W-18 Brak logów bezpieczeństwa — log API nie zawiera zdarzeń bezpieczeństwa (login_failed)
+[PODATNE] SEC-017 Brak limitów rozmiaru i paginacji — tytuł 300 znaków=201 (oczekiwano 422), limit=1000=200 (422), ciało 70 kB=201 (413)
+[PODATNE] SEC-020 Tokeny sesji jawnie w bazie — sessions (kolumny: token user_id created_at), token jawnie w bazie: yes
+[PODATNE] SEC-021 Brak nagłówków bezpieczeństwa — brak co najmniej jednego z nagłówków: X-Content-Type-Options, X-Frame-Options, Content-Security-Policy
+[PODATNE] RT-13 Nieobsłużony OverflowError (traceback) — identyfikator 99999999999999999999 daje HTTP 500 zamiast 422
+
+Podsumowanie: podatne=22, naprawione=0, pominięte=0

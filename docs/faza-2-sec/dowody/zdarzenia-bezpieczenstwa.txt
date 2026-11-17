@@ -1,0 +1,28 @@
+2026-11-16 17:50:25,143 INFO patchpoint.security {"client_ip": null, "event": "demo_data_seeded", "users": 3}
+2026-11-16 17:50:25,722 INFO patchpoint.security {"client_ip": "127.0.0.1", "event": "login_succeeded", "user_id": 2, "username": "jan.kowalski"}
+2026-11-16 17:50:25,807 INFO patchpoint.security {"client_ip": "127.0.0.1", "event": "login_succeeded", "user_id": 1, "username": "helpdesk"}
+2026-11-16 17:50:25,829 INFO patchpoint.security {"assignee_id": 1, "client_ip": "127.0.0.1", "event": "ticket_updated", "priority": null, "status": "in_progress", "ticket_id": 4, "user_id": 1}
+2026-11-16 17:50:25,861 INFO patchpoint.security {"assignee_id": null, "client_ip": "127.0.0.1", "event": "ticket_updated", "priority": null, "status": "resolved", "ticket_id": 4, "user_id": 1}
+2026-11-16 17:50:25,868 INFO patchpoint.security {"assignee_id": null, "client_ip": "127.0.0.1", "event": "ticket_updated", "priority": null, "status": "closed", "ticket_id": 4, "user_id": 1}
+2026-11-16 17:50:25,888 INFO patchpoint.security {"client_ip": "127.0.0.1", "event": "logout", "user_id": 2}
+2026-11-16 17:50:26,009 INFO patchpoint.security {"client_ip": "127.0.0.1", "event": "user_registered", "role": "employee", "user_id": 4, "username": "poc.a.5bb22135"}
+2026-11-16 17:50:26,060 INFO patchpoint.security {"client_ip": "127.0.0.1", "event": "user_registered", "role": "employee", "user_id": 5, "username": "poc.b.5bb22135"}
+2026-11-16 17:50:26,112 INFO patchpoint.security {"client_ip": "127.0.0.1", "event": "user_registered", "role": "employee", "user_id": 6, "username": "poc.c.5bb22135"}
+2026-11-16 17:50:26,166 INFO patchpoint.security {"client_ip": "127.0.0.1", "event": "user_registered", "role": "employee", "user_id": 7, "username": "poc.d.5bb22135"}
+2026-11-16 17:50:26,220 INFO patchpoint.security {"client_ip": "127.0.0.1", "event": "login_succeeded", "user_id": 4, "username": "poc.a.5bb22135"}
+2026-11-16 17:50:26,274 INFO patchpoint.security {"client_ip": "127.0.0.1", "event": "login_succeeded", "user_id": 5, "username": "poc.b.5bb22135"}
+2026-11-16 17:50:26,532 WARNING patchpoint.security {"client_ip": "127.0.0.1", "event": "access_denied", "path": "/api/tickets/5", "reason": "not_ticket_owner", "ticket_id": 5, "user_id": 5}
+2026-11-16 17:50:26,539 WARNING patchpoint.security {"client_ip": "127.0.0.1", "event": "access_denied", "path": "/api/tickets/5/comments", "reason": "not_ticket_owner", "ticket_id": 5, "user_id": 5}
+2026-11-16 17:50:26,591 WARNING patchpoint.security {"client_ip": "127.0.0.1", "event": "registration_conflict", "username": "poc.a.5bb22135"}
+2026-11-16 17:50:26,661 WARNING patchpoint.security {"client_ip": "127.0.0.1", "event": "login_failed", "reason": "unknown_user", "username": "poc.nobody.5bb22135"}
+2026-11-16 17:50:26,717 WARNING patchpoint.security {"client_ip": "127.0.0.1", "event": "login_failed", "reason": "bad_password", "username": "poc.a.5bb22135"}
+2026-11-16 17:50:26,769 WARNING patchpoint.security {"client_ip": "127.0.0.1", "event": "login_failed", "reason": "unknown_user", "username": "admin"}
+2026-11-16 17:50:26,821 WARNING patchpoint.security {"client_ip": "127.0.0.1", "event": "login_failed", "reason": "bad_password", "username": "poc.d.5bb22135"}
+2026-11-16 17:50:26,872 WARNING patchpoint.security {"client_ip": "127.0.0.1", "event": "login_failed", "reason": "bad_password", "username": "poc.d.5bb22135"}
+2026-11-16 17:50:26,925 WARNING patchpoint.security {"client_ip": "127.0.0.1", "event": "login_failed", "reason": "bad_password", "username": "poc.d.5bb22135"}
+2026-11-16 17:50:26,977 WARNING patchpoint.security {"client_ip": "127.0.0.1", "event": "login_failed", "reason": "bad_password", "username": "poc.d.5bb22135"}
+2026-11-16 17:50:27,032 WARNING patchpoint.security {"client_ip": "127.0.0.1", "event": "login_failed", "reason": "bad_password", "username": "poc.d.5bb22135"}
+2026-11-16 17:50:27,042 WARNING patchpoint.security {"client_ip": "127.0.0.1", "event": "login_blocked", "username": "poc.d.5bb22135"}
+2026-11-16 17:50:27,095 INFO patchpoint.security {"client_ip": "127.0.0.1", "event": "login_succeeded", "user_id": 6, "username": "poc.c.5bb22135"}
+2026-11-16 17:50:27,105 INFO patchpoint.security {"client_ip": "127.0.0.1", "event": "logout", "user_id": 6}
+2026-11-16 17:50:27,112 WARNING patchpoint.security {"client_ip": "127.0.0.1", "event": "session_rejected", "reason": "unknown", "user_id": null}
