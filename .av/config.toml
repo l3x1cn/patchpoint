@@ -53,6 +53,22 @@ rm -f "$f"
 kill -s TERM -- "-$pg" 2>/dev/null || true
 '''
 
+# State Check store `patchpoint`, the name the QA plan's State Checks use: the SQLite file at
+# PATCHPOINT_DATABASE_PATH (backend/app/config.py:12-14) that the API creates and opens with sqlite3
+# (init_db in backend/app/main.py:52 and backend/app/database.py:275-282; get_db in
+# backend/app/dependencies.py:25-27; connect in backend/app/database.py:118-122). The up above runs
+# in the repository root and starts the API with PATCHPOINT_DATABASE_PATH="$PWD/.av/run/patchpoint.db"
+# (.av/config.toml:24 and :33-34), so path is that repository-relative, git-ignored file (.av/run/
+# in .gitignore). It is the API's database only when that up started the API: an API already
+# answering on localhost:8000, such as a plain `make run`, keeps its own PATCHPOINT_DATABASE_PATH
+# (default backend/data/patchpoint.db, README.md:106), and up leaves it running
+# (.av/config.toml:30). The State Checks read users, sessions, login_failures and PRAGMA
+# user_version (backend/app/schema.sql:1-51).
+[env.stores.patchpoint]
+kind = "sql"
+engine = "sqlite"
+path = ".av/run/patchpoint.db"
+
 [qa]
 fix = "off"
 mutations = "allow"
