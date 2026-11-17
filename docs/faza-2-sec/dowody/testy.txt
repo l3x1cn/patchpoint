@@ -1,0 +1,42 @@
+cd backend && uv run pytest
+============================= test session starts ==============================
+platform linux -- Python 3.14.10, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/lex/Projects/patchpoint/backend
+configfile: pyproject.toml
+testpaths: tests
+plugins: cov-7.1.0, anyio-4.16.0
+collected 122 items
+
+tests/test_auth.py ............................                          [ 22%]
+tests/test_cors.py .....                                                 [ 27%]
+tests/test_database.py .............                                     [ 37%]
+tests/test_errors.py ...                                                 [ 40%]
+tests/test_health.py .                                                   [ 40%]
+tests/test_platform.py .........                                         [ 48%]
+tests/test_sessions.py ........                                          [ 54%]
+tests/test_ticket_security.py ......................                     [ 72%]
+tests/test_tickets.py .................................                  [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.14.10-final-0 _______________
+
+Name                      Stmts   Miss  Cover   Missing
+-------------------------------------------------------
+app/__init__.py               0      0   100%
+app/audit.py                 18      0   100%
+app/config.py                30      0   100%
+app/database.py             111      5    95%   128-129, 136-137, 191
+app/dependencies.py          36      0   100%
+app/main.py                  40      0   100%
+app/middleware.py            23      0   100%
+app/routers/__init__.py       0      0   100%
+app/routers/auth.py          59      2    97%   58, 70
+app/routers/health.py         9      0   100%
+app/routers/tickets.py       75      1    99%   247
+app/schemas.py               66      0   100%
+app/security.py              31      0   100%
+app/sessions.py              59      1    98%   94
+-------------------------------------------------------
+TOTAL                       557      9    98%
+Required test coverage of 80% reached. Total coverage: 98.38%
+============================= 122 passed in 13.15s =============================
