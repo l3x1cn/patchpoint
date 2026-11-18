@@ -1,5 +1,4 @@
 import hashlib
-import json
 import re
 from collections.abc import Sequence
 from contextlib import closing
@@ -12,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from app.config import Settings
 from app.database import connect, fetch_all, fetch_one, isoformat, run, transaction, utc_now
-from tests.support import API_BASE_URL, LoginAs, UserFactory
+from tests.support import API_BASE_URL, LoginAs, UserFactory, log_events
 
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_-]{43,}")
 SESSION_UPDATES: Final = {
@@ -140,11 +139,7 @@ def test_rejected_sessions_are_logged(
 
     session_client.get("/api/auth/me")
 
-    events: Sequence[dict[str, object]] = [
-        json.loads(record.getMessage())
-        for record in caplog.records
-        if record.name == "patchpoint.security"
-    ]
+    events: Sequence[dict[str, object]] = log_events(caplog)
     rejected = [event for event in events if event["event"] == "session_rejected"]
     assert len(rejected) == 1
     assert rejected[0]["reason"] == reason

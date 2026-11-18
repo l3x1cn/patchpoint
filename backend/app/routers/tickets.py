@@ -66,6 +66,7 @@ UPDATE_TICKET_SQL: Final = (
 
 PAGE_SIZE_DEFAULT: Final = 50
 PAGE_SIZE_MAX: Final = 100
+COMMENTS_IN_DETAIL_MAX: Final = 50
 
 type TicketId = Annotated[int, Path(ge=1, le=MAX_SQLITE_INTEGER)]
 
@@ -159,11 +160,18 @@ async def get_ticket(
 ) -> TicketDetailResponse:
     row = _visible_ticket(conn, ticket_id, user, request)
     comment_rows = fetch_all(
-        conn, f"{COMMENT_SELECT} WHERE c.ticket_id = ? ORDER BY c.id", (ticket_id,)
+        conn,
+        f"{COMMENT_SELECT} WHERE c.ticket_id = ? ORDER BY c.id DESC LIMIT ?",
+        (ticket_id, COMMENTS_IN_DETAIL_MAX),
     )
-    comments = [CommentResponse.model_validate(dict(c)) for c in comment_rows]
+    count_row = fetch_one(conn, "SELECT COUNT(*) FROM comments WHERE ticket_id = ?", (ticket_id,))
+    comment_count = count_row[0] if count_row is not None else 0
+    # Newest N, shown oldest-first like the full thread.
+    comments = [CommentResponse.model_validate(dict(c)) for c in reversed(comment_rows)]
 
-    return TicketDetailResponse.model_validate({**dict(row), "comments": comments})
+    return TicketDetailResponse.model_validate(
+        {**dict(row), "comments": comments, "comment_count": comment_count}
+    )
 
 
 @router.patch("/{ticket_id}")

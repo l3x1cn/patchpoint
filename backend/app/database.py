@@ -172,7 +172,7 @@ def create_user(
     conn: sqlite3.Connection,
     *,
     username: str,
-    password: str,
+    password_hash: str,
     full_name: str,
     department: str,
     role: Role,
@@ -181,7 +181,7 @@ def create_user(
         conn,
         "INSERT INTO users (username, password_hash, full_name, department, role, created_at) "
         "VALUES (?, ?, ?, ?, ?, ?)",
-        (username, hash_password(password), full_name, department, role.value, utc_now_iso()),
+        (username, password_hash, full_name, department, role.value, utc_now_iso()),
     )
 
 
@@ -211,7 +211,7 @@ def seed_demo_data(conn: sqlite3.Connection, *, password: str) -> None:
             create_user(
                 conn,
                 username=user.username,
-                password=password,
+                password_hash=hash_password(password),
                 full_name=user.full_name,
                 department=user.department,
                 role=user.role,

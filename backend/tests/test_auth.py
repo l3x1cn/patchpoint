@@ -1,4 +1,3 @@
-import json
 import logging
 from contextlib import closing
 from datetime import timedelta
@@ -12,7 +11,16 @@ from app.config import Settings
 from app.database import connect, fetch_one, isoformat, run, transaction, utc_now
 from app.main import create_app
 from app.schemas import Role
-from tests.support import API_BASE_URL, DEFAULT_PASSWORD, DEMO_PASSWORD, LoginAs, UserFactory
+from tests.support import (
+    API_BASE_URL,
+    DEFAULT_PASSWORD,
+    DEMO_PASSWORD,
+    SECURITY_LOGGER,
+    LoginAs,
+    UserFactory,
+    log_events,
+    log_records,
+)
 
 REGISTER_PAYLOAD: dict[str, Any] = {
     "username": "new.user",
@@ -26,20 +34,12 @@ def login_payload(username: str, password: str = DEFAULT_PASSWORD) -> dict[str, 
     return {"username": username, "password": password}
 
 
-def count_users(settings: Settings, username: str) -> int:
+def count_users_named(settings: Settings, username: str) -> int:
     with closing(connect(settings.database_path)) as conn:
         row = fetch_one(conn, "SELECT COUNT(*) AS n FROM users WHERE username = ?", (username,))
     assert row is not None
     count: int = row["n"]
     return count
-
-
-def security_events(caplog: pytest.LogCaptureFixture) -> list[dict[str, Any]]:
-    return [
-        json.loads(record.getMessage())
-        for record in caplog.records
-        if record.name == "patchpoint.security"
-    ]
 
 
 def test_register_creates_employee_account(client: TestClient) -> None:
@@ -87,11 +87,27 @@ def test_register_validates_payload(client: TestClient, payload: dict[str, Any])
     assert response.status_code == 422
 
 
-def test_register_rejects_role_field(client: TestClient, settings: Settings) -> None:
+def test_register_rejects_role_field(
+    client: TestClient, settings: Settings, caplog: pytest.LogCaptureFixture
+) -> None:
     response = client.post("/api/auth/register", json={**REGISTER_PAYLOAD, "role": "agent"})
 
     assert response.status_code == 422
-    assert count_users(settings, "new.user") == 0
+    assert response.json()["detail"][0]["type"] == "extra_forbidden"
+    assert response.json()["detail"][0]["loc"] == ["body", "role"]
+    assert count_users_named(settings, "new.user") == 0
+
+    events = log_events(caplog)
+    assert len(events) == 1
+    event = events[0]
+    assert event["event"] == "validation_failed"
+    assert event["path"] == "/api/auth/register"
+    assert event["types"] == "extra_forbidden"
+    assert event["fields"] == "body.role"
+    assert event["client_ip"] is not None
+    assert [r.levelno for r in log_records(caplog)] == [logging.WARNING]
+    for submitted in (REGISTER_PAYLOAD["password"], "agent", REGISTER_PAYLOAD["full_name"]):
+        assert submitted not in caplog.text
 
 
 def test_register_enforces_password_policy(client: TestClient) -> None:
@@ -164,6 +180,14 @@ def test_session_cookie_has_security_attributes(
     cookie = response.headers["set-cookie"].lower()
     for attribute in ("httponly", "secure", "samesite=strict", "max-age=28800", "path=/"):
         assert attribute in cookie
+
+
+def test_session_cookie_is_host_only(client: TestClient, user_factory: UserFactory) -> None:
+    user_factory("alice")
+
+    response = client.post("/api/auth/login", json=login_payload("alice"))
+
+    assert "domain=" not in response.headers["set-cookie"].lower()
 
 
 def test_bearer_header_is_not_accepted(
@@ -239,7 +263,7 @@ def test_authentication_events_are_logged_without_secrets(
     client.post("/api/auth/login", json=login_payload("alice", wrong_password))
     client.post("/api/auth/login", json=login_payload("alice"))
 
-    events = security_events(caplog)
+    events = log_events(caplog)
     assert [event["event"] for event in events] == ["login_failed", "login_succeeded"]
     assert events[0]["reason"] == "bad_password"
     assert events[0]["username"] == "alice"
@@ -256,7 +280,7 @@ def test_registration_events_are_logged(
     client.post("/api/auth/register", json=REGISTER_PAYLOAD)
     client.post("/api/auth/register", json={**REGISTER_PAYLOAD, "username": "taken"})
 
-    events = security_events(caplog)
+    events = log_events(caplog)
     assert [event["event"] for event in events] == ["user_registered", "registration_conflict"]
     assert events[0]["role"] == "employee"
     assert events[1]["username"] == "taken"
@@ -333,11 +357,11 @@ def test_seeding_logs_event_once(
     seeded_settings: Settings, caplog: pytest.LogCaptureFixture
 ) -> None:
     app = create_app(seeded_settings)
-    with caplog.at_level(logging.INFO, logger="patchpoint.security"):
+    with caplog.at_level(logging.INFO, logger=SECURITY_LOGGER):
         with TestClient(app):
             pass
         with TestClient(app):
             pass
 
-    events = [event["event"] for event in security_events(caplog)]
+    events = [event["event"] for event in log_events(caplog)]
     assert events == ["demo_data_seeded"]

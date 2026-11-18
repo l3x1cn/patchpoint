@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.config import Settings
-from tests.support import DEFAULT_PASSWORD, UserFactory
+from tests.support import DEFAULT_PASSWORD, ERRORS_LOGGER, UserFactory, log_records
 
 ERROR_ID_PATTERN = re.compile(r"[0-9a-f]{32}")
 
@@ -37,7 +37,7 @@ def test_database_error_returns_generic_body_and_logs_details(
     for leaked in ("sessions", "INSERT", "sqlite", "Traceback", str(settings.database_path)):
         assert leaked not in response.text
 
-    records = [record for record in caplog.records if record.name == "patchpoint.errors"]
+    records = log_records(caplog, ERRORS_LOGGER)
     assert len(records) == 1
     entry = json.loads(records[0].getMessage())
     assert entry["event"] == "internal_error"
@@ -70,12 +70,12 @@ def test_unhandled_exception_is_logged_without_leaking_to_client(
         raise RuntimeError("failure-detail")
 
     with (
-        caplog.at_level(logging.ERROR, logger="patchpoint.errors"),
+        caplog.at_level(logging.ERROR, logger=ERRORS_LOGGER),
         TestClient(app, raise_server_exceptions=False) as client,
     ):
         response = client.get("/api/test-failure")
 
-    records = [record for record in caplog.records if record.name == "patchpoint.errors"]
+    records = log_records(caplog, ERRORS_LOGGER)
     assert len(records) == 1
     entry = json.loads(records[0].getMessage())
     assert entry["error_id"] == response.json()["error_id"]

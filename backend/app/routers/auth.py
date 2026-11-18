@@ -3,6 +3,7 @@ import sqlite3
 from typing import Final
 
 from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi.concurrency import run_in_threadpool
 
 from app.audit import log_security_event
 from app.database import (
@@ -23,6 +24,7 @@ from app.schemas import (
 )
 from app.security import (
     SESSION_COOKIE_NAME,
+    hash_password,
     simulate_password_check,
     verify_password,
 )
@@ -43,12 +45,14 @@ LOGIN_BLOCKED: Final = "Too many failed login attempts. Try again later."
 
 @router.post("/register", status_code=201)
 async def register(payload: UserCreate, request: Request, conn: DbConnection) -> UserResponse:
+    # Argon2 is CPU-bound, so it runs in a worker thread instead of on the event loop.
+    password_hash = await run_in_threadpool(hash_password, payload.password)
     try:
         with transaction(conn):
             user_id = create_user(
                 conn,
                 username=payload.username,
-                password=payload.password,
+                password_hash=password_hash,
                 full_name=payload.full_name,
                 department=payload.department,
                 role=Role.EMPLOYEE,
@@ -98,6 +102,12 @@ async def login(
             headers={"Retry-After": str(settings.login_lockout_minutes * 60)},
         )
 
+    # Count the attempt before the first await: between the check above and this write nothing
+    # yields to the event loop, so concurrent guesses cannot all pass the lockout check. A
+    # successful login clears the counter again. Only the pure Argon2 functions run in the pool;
+    # the per-request SQLite connection stays on the event-loop thread.
+    record_login_failure(conn, payload.username, settings)
+
     row = fetch_one(
         conn,
         "SELECT id, username, full_name, department, role, created_at, password_hash "
@@ -105,8 +115,7 @@ async def login(
         (payload.username,),
     )
     if row is None:
-        simulate_password_check(payload.password)
-        record_login_failure(conn, payload.username, settings)
+        await run_in_threadpool(simulate_password_check, payload.password)
         log_security_event(
             "login_failed",
             request,
@@ -116,8 +125,11 @@ async def login(
         )
         raise HTTPException(status_code=401, detail=INVALID_CREDENTIALS)
 
-    if not verify_password(payload.password, row["password_hash"]):
-        record_login_failure(conn, payload.username, settings)
+    password_matches = await run_in_threadpool(
+        verify_password, payload.password, row["password_hash"]
+    )
+    if not password_matches:
+        # The attempt was already counted above, so there is nothing left to record.
         log_security_event(
             "login_failed",
             request,

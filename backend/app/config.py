@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     seed_demo_data: bool = False
     demo_password: SecretStr | None = None
     docs_enabled: bool = False
-    cors_origins: list[str] = ["http://localhost:5500"]
+    cors_origins: list[str] = ["http://patchpoint.localhost:5500"]
     max_body_bytes: int = Field(default=65_536, ge=1_024, le=10_485_760)
     cookie_secure: bool = True
     session_idle_minutes: int = Field(default=30, ge=1, le=1_440)

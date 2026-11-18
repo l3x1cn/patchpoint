@@ -1,4 +1,4 @@
-const API_BASE_URL = "http://localhost:8000";
+const API_BASE_URL = "http://patchpoint.localhost:8000";
 const PAGE_SIZE = 50;
 const SESSION_EXPIRED_MESSAGE = "Sesja wygasła lub została zakończona — zaloguj się ponownie.";
 
@@ -278,6 +278,13 @@ async function openTicket(id) {
     el("p", "description", ticket.description),
     renderAgentActions(ticket),
     el("h3", null, "Komentarze"),
+    ticket.comment_count > ticket.comments.length
+      ? el(
+          "p",
+          "meta",
+          `Wyświetlono ostatnie ${ticket.comments.length} z ${ticket.comment_count} komentarzy.`
+        )
+      : null,
     el("ul", "comments", ...comments),
     renderCommentForm()
   ];
