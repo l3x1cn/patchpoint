@@ -1,12 +1,12 @@
 version = 1
 
 # Local origins: the API from `make run` and the static UI from `make frontend` (Makefile targets
-# `run` and `frontend`), both bound to 127.0.0.1. Hosts use `localhost` like `API_BASE_URL` in
-# frontend/app.js: the API's CORS allow-list (PATCHPOINT_CORS_ORIGINS, backend/app/config.py)
-# contains only http://localhost:5500, and the session cookie is set for localhost.
+# `run` and `frontend`), both bound to 127.0.0.1. Hosts use `patchpoint.localhost` like `API_BASE_URL`
+# in frontend/app.js: the CORS allow-list (backend/app/config.py) holds only http://patchpoint.localhost:5500,
+# and the session cookie is set for that host, a different site from `localhost` (SEC-001).
 [env.targets]
-ui = "http://localhost:5500"
-backend = "http://localhost:8000"
+ui = "http://patchpoint.localhost:5500"
+backend = "http://patchpoint.localhost:8000"
 
 # health: GET /api/health (backend/app/routers/health.py) and the UI root served by `make frontend`.
 # up: starts only the services that do not answer yet, then waits for both probes with curl.
@@ -27,17 +27,17 @@ mkdir -p "$d"
 chmod 700 "$d"
 [ -O "$d" ] || { echo "$d is not owned by the current user" >&2; exit 1; }
 echo "$$" > "$d/pgid"
-if ! ok http://localhost:8000/api/health; then
+if ! ok http://patchpoint.localhost:8000/api/health; then
   pw=$(sed -n 's/^QA_AGENT_PASSWORD=//p' .av/secrets.local.env)
   [ -n "$pw" ] || { echo "QA_AGENT_PASSWORD is missing in .av/secrets.local.env" >&2; exit 1; }
   rm -f "$d/patchpoint.db" "$d/patchpoint.db-journal"
   PATCHPOINT_DATABASE_PATH="$d/patchpoint.db" PATCHPOINT_SEED_DEMO_DATA=true PATCHPOINT_DEMO_PASSWORD="$pw" make run > "$d/api.log" 2>&1 &
 fi
-if ! ok http://localhost:5500/; then
+if ! ok http://patchpoint.localhost:5500/; then
   make frontend > "$d/ui.log" 2>&1 &
 fi
 i=0
-until ok http://localhost:8000/api/health && ok http://localhost:5500/; do
+until ok http://patchpoint.localhost:8000/api/health && ok http://patchpoint.localhost:5500/; do
   i=$((i + 1))
   [ "$i" -lt 60 ] || { echo "PatchPoint not ready after 60 s; see $d/api.log and $d/ui.log" >&2; exit 1; }
   sleep 1
@@ -60,7 +60,7 @@ kill -s TERM -- "-$pg" 2>/dev/null || true
 # in the repository root and starts the API with PATCHPOINT_DATABASE_PATH="$PWD/.av/run/patchpoint.db"
 # (.av/config.toml:24 and :33-34), so path is that repository-relative, git-ignored file (.av/run/
 # in .gitignore). It is the API's database only when that up started the API: an API already
-# answering on localhost:8000, such as a plain `make run`, keeps its own PATCHPOINT_DATABASE_PATH
+# answering on patchpoint.localhost:8000, such as a plain `make run`, keeps its own PATCHPOINT_DATABASE_PATH
 # (default backend/data/patchpoint.db, README.md:106), and up leaves it running
 # (.av/config.toml:30). The State Checks read users, sessions, login_failures and PRAGMA
 # user_version (backend/app/schema.sql:1-51).
