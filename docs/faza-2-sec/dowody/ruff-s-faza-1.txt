@@ -1,0 +1,4 @@
+app/routers/tickets.py:149:19: S608 Possible SQL injection vector through string-based query construction
+app/security.py:9:12: S324 Probable use of insecure hash functions in `hashlib`: `md5`
+app/security.py:17:12: S324 Probable use of insecure hash functions in `hashlib`: `md5`
+Found 3 errors.

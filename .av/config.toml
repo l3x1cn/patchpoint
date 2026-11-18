@@ -1,39 +1,43 @@
 version = 1
 
-# Local origins (README.md:17,59-60): API from `make run` (Makefile:2-3,12-13) and static UI
-# from `make frontend` (Makefile:4,27-28), both bound to 127.0.0.1. Hosts use `localhost`, like
-# the frontend's API base (frontend/app.js:1); README.md:65 requires the localhost UI origin so
-# the localhost:8000 session cookie is sent.
+# Local origins: the API from `make run` and the static UI from `make frontend` (Makefile targets
+# `run` and `frontend`), both bound to 127.0.0.1. Hosts use `patchpoint.localhost` like `API_BASE_URL`
+# in frontend/app.js: the CORS allow-list (backend/app/config.py) holds only http://patchpoint.localhost:5500,
+# and the session cookie is set for that host, a different site from `localhost` (SEC-001).
 [env.targets]
-ui = "http://localhost:5500"
-backend = "http://localhost:8000"
+ui = "http://patchpoint.localhost:5500"
+backend = "http://patchpoint.localhost:8000"
 
-# health: GET /api/health (backend/app/routers/health.py:10,13) and the UI root served by
-# `make frontend` (Makefile:27-28, README.md:60).
-# up: starts only the services not answering yet, then waits for both probes with curl
-# (README.md:52). `make run` (Makefile:12-13) gets a fresh SQLite file outside the repository
-# through PATCHPOINT_DATABASE_PATH and PATCHPOINT_SEED_DEMO_DATA (backend/app/config.py:10-14,
-# README.md:73-74); API startup creates the directory, schema and demo data
-# (backend/app/main.py:18-21, backend/app/database.py:197-204), so no prepare step is needed.
-# `make frontend` serves the UI (Makefile:27-28).
+# health: GET /api/health (backend/app/routers/health.py) and the UI root served by `make frontend`.
+# up: starts only the services that do not answer yet, then waits for both probes with curl.
+# Runtime files live in the git-ignored, user-owned .av/run/ directory (mode 0700), not in a
+# shared system temporary directory. The API gets a fresh SQLite file through PATCHPOINT_DATABASE_PATH and
+# seeds the demo accounts (DEMO_USERS in backend/app/database.py) because
+# PATCHPOINT_SEED_DEMO_DATA=true; PATCHPOINT_DEMO_PASSWORD is QA_AGENT_PASSWORD from the
+# git-ignored .av/secrets.local.env, so the demo agent `helpdesk` logs in with the QA agent
+# credentials.
 # down: stops the process group that up recorded.
 [env.services]
 health = ["backend:/api/health", "ui:/"]
 up = '''
 set -eu
-d=/tmp/patchpoint-qa
-ok() { curl -fs -o /dev/null "$1"; }
-mkdir -p -m 700 "$d"
+d="$PWD/.av/run"
+ok() { curl -fs --noproxy '*' -o /dev/null "$1"; }
+mkdir -p "$d"
+chmod 700 "$d"
+[ -O "$d" ] || { echo "$d is not owned by the current user" >&2; exit 1; }
 echo "$$" > "$d/pgid"
-if ! ok http://localhost:8000/api/health; then
+if ! ok http://patchpoint.localhost:8000/api/health; then
+  pw=$(sed -n 's/^QA_AGENT_PASSWORD=//p' .av/secrets.local.env)
+  [ -n "$pw" ] || { echo "QA_AGENT_PASSWORD is missing in .av/secrets.local.env" >&2; exit 1; }
   rm -f "$d/patchpoint.db" "$d/patchpoint.db-journal"
-  PATCHPOINT_DATABASE_PATH="$d/patchpoint.db" PATCHPOINT_SEED_DEMO_DATA=true make run > "$d/api.log" 2>&1 &
+  PATCHPOINT_DATABASE_PATH="$d/patchpoint.db" PATCHPOINT_SEED_DEMO_DATA=true PATCHPOINT_DEMO_PASSWORD="$pw" make run > "$d/api.log" 2>&1 &
 fi
-if ! ok http://localhost:5500/; then
+if ! ok http://patchpoint.localhost:5500/; then
   make frontend > "$d/ui.log" 2>&1 &
 fi
 i=0
-until ok http://localhost:8000/api/health && ok http://localhost:5500/; do
+until ok http://patchpoint.localhost:8000/api/health && ok http://patchpoint.localhost:5500/; do
   i=$((i + 1))
   [ "$i" -lt 60 ] || { echo "PatchPoint not ready after 60 s; see $d/api.log and $d/ui.log" >&2; exit 1; }
   sleep 1
@@ -41,7 +45,7 @@ done
 '''
 down = '''
 set -eu
-f=/tmp/patchpoint-qa/pgid
+f="$PWD/.av/run/pgid"
 [ -f "$f" ] || exit 0
 pg=$(cat "$f")
 rm -f "$f"
@@ -49,21 +53,36 @@ rm -f "$f"
 kill -s TERM -- "-$pg" 2>/dev/null || true
 '''
 
+# State Check store `patchpoint`, the name the QA plan's State Checks use: the SQLite file at
+# PATCHPOINT_DATABASE_PATH (backend/app/config.py:12-14) that the API creates and opens with sqlite3
+# (init_db in backend/app/main.py:52 and backend/app/database.py:275-282; get_db in
+# backend/app/dependencies.py:25-27; connect in backend/app/database.py:118-122). The up above runs
+# in the repository root and starts the API with PATCHPOINT_DATABASE_PATH="$PWD/.av/run/patchpoint.db"
+# (.av/config.toml:24 and :33-34), so path is that repository-relative, git-ignored file (.av/run/
+# in .gitignore). It is the API's database only when that up started the API: an API already
+# answering on patchpoint.localhost:8000, such as a plain `make run`, keeps its own PATCHPOINT_DATABASE_PATH
+# (default backend/data/patchpoint.db, README.md:106), and up leaves it running
+# (.av/config.toml:30). The State Checks read users, sessions, login_failures and PRAGMA
+# user_version (backend/app/schema.sql:1-51).
+[env.stores.patchpoint]
+kind = "sql"
+engine = "sqlite"
+path = ".av/run/patchpoint.db"
+
 [qa]
 fix = "off"
 mutations = "allow"
 start_services = "auto"
 
-# Existing agent declared by the plan (docs/testing/plans/2026-11-16-patchpoint-helpdesk-mvp-test-plan.md:46).
-# Only role agent may change ticket status and assignee (backend/app/routers/tickets.py:108,
-# backend/app/dependencies.py:56-58) and list every ticket (backend/app/routers/tickets.py:81-82);
-# signup defaults to employee (backend/app/schemas.py:17). The demo agent `helpdesk` (README.md:76-81,
-# backend/app/database.py:13-15) is seeded into an empty database (backend/app/database.py:130-135),
-# as on QA's own bring-up above. Login looks users up by username (backend/app/routers/auth.py:44-50,
-# backend/app/schemas.py:30-32), so QA_AGENT_EMAIL holds the agent's username. Both values come from
-# the git-ignored .av/secrets.local.env (.gitignore:17).
+# Existing Helpdesk agent for the QA plan. Only role agent may change ticket status and assignee and
+# list every ticket (require_agent in backend/app/dependencies.py, list_tickets in
+# backend/app/routers/tickets.py); self-registration always creates employees (UserCreate in
+# backend/app/schemas.py). The demo agent `helpdesk` exists because QA's own bring-up above seeds
+# the demo data with PATCHPOINT_DEMO_PASSWORD = QA_AGENT_PASSWORD. Login looks users up by username
+# (LoginRequest in backend/app/schemas.py), so QA_AGENT_EMAIL holds the agent's username. Both
+# values come from the git-ignored .av/secrets.local.env.
 [qa.users.agent]
-description = "Existing Helpdesk agent (role agent), such as the seeded demo agent: the only role that may change ticket status and assignee, and it lists every ticket. PatchPoint logs in by username, so email holds the agent's username."
+description = "Existing Helpdesk agent (role agent), the seeded demo agent: the only role that may change ticket status and assignee, and it lists every ticket. PatchPoint logs in by username, so email holds the agent's username."
 email = "file:.av/secrets.local.env#QA_AGENT_EMAIL"
 password = "file:.av/secrets.local.env#QA_AGENT_PASSWORD"
 

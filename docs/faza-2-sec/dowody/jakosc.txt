@@ -1,0 +1,8 @@
+$ make lint
+cd backend && uv run ruff check . && uv run ruff format --check .
+All checks passed!
+28 files already formatted
+
+$ make typecheck
+cd backend && uv run mypy app tests
+Success: no issues found in 28 source files
