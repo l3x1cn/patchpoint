@@ -1,21 +1,16 @@
-import json
+from contextlib import closing
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.config import Settings
+from app.database import connect, transaction, utc_now_iso
+from app.routers.tickets import COMMENTS_IN_DETAIL_MAX
 from app.schemas import MAX_SQLITE_INTEGER, Role
-from tests.support import LoginAs, TicketFactory, UserFactory
+from tests.support import LoginAs, TicketFactory, UserFactory, log_events
 
 OUT_OF_RANGE_ID = 99999999999999999999
-
-
-def security_events(caplog: pytest.LogCaptureFixture) -> list[dict[str, Any]]:
-    return [
-        json.loads(record.getMessage())
-        for record in caplog.records
-        if record.name == "patchpoint.security"
-    ]
 
 
 def ids(response_json: list[dict[str, Any]]) -> list[int]:
@@ -117,7 +112,7 @@ def test_foreign_ticket_access_is_logged(
 
     login_as("jan").get(f"/api/tickets/{foreign}")
 
-    denied = [e for e in security_events(caplog) if e["event"] == "access_denied"]
+    denied = [e for e in log_events(caplog) if e["event"] == "access_denied"]
     assert len(denied) == 1
     assert denied[0]["reason"] == "not_ticket_owner"
     assert denied[0]["ticket_id"] == foreign
@@ -212,6 +207,47 @@ def test_comment_body_has_length_limit(
     assert response.status_code == 422
 
 
+def test_ticket_detail_returns_only_newest_comments_with_total(
+    user_factory: UserFactory,
+    login_as: LoginAs,
+    ticket_factory: TicketFactory,
+    settings: Settings,
+) -> None:
+    author_id = user_factory("jan")
+    jan = login_as("jan")
+    ticket_id = ticket_factory(jan)
+    total = COMMENTS_IN_DETAIL_MAX + 25
+    with closing(connect(settings.database_path)) as conn, transaction(conn):
+        conn.executemany(
+            "INSERT INTO comments (ticket_id, author_id, body, created_at) VALUES (?, ?, ?, ?)",
+            [(ticket_id, author_id, f"komentarz {n}", utc_now_iso()) for n in range(1, total + 1)],
+        )
+
+    response = jan.get(f"/api/tickets/{ticket_id}")
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["comment_count"] == total
+    assert [c["body"] for c in body["comments"]] == [
+        f"komentarz {n}" for n in range(total - COMMENTS_IN_DETAIL_MAX + 1, total + 1)
+    ]
+
+
+def test_ticket_detail_counts_all_comments_below_the_limit(
+    user_factory: UserFactory, login_as: LoginAs, ticket_factory: TicketFactory
+) -> None:
+    user_factory("jan")
+    jan = login_as("jan")
+    ticket_id = ticket_factory(jan)
+    jan.post(f"/api/tickets/{ticket_id}/comments", json={"body": "Pierwszy"})
+    jan.post(f"/api/tickets/{ticket_id}/comments", json={"body": "Drugi"})
+
+    body = jan.get(f"/api/tickets/{ticket_id}").json()
+
+    assert body["comment_count"] == 2
+    assert [c["body"] for c in body["comments"]] == ["Pierwszy", "Drugi"]
+
+
 def test_unknown_fields_are_rejected(
     user_factory: UserFactory, login_as: LoginAs, ticket_factory: TicketFactory
 ) -> None:
@@ -244,7 +280,7 @@ def test_ticket_updates_are_audited(
     response = login_as("agent").patch(f"/api/tickets/{ticket_id}", json={"status": "in_progress"})
 
     assert response.status_code == 200
-    updated = [e for e in security_events(caplog) if e["event"] == "ticket_updated"]
+    updated = [e for e in log_events(caplog) if e["event"] == "ticket_updated"]
     assert len(updated) == 1
     assert updated[0]["user_id"] == agent_id
     assert updated[0]["ticket_id"] == ticket_id
@@ -265,7 +301,7 @@ def test_employee_role_denial_is_logged(
 
     response = jan.patch(f"/api/tickets/{ticket_id}", json={"status": "closed"})
 
-    denied = [e for e in security_events(caplog) if e["event"] == "access_denied"]
+    denied = [e for e in log_events(caplog) if e["event"] == "access_denied"]
     assert response.status_code == 403
     assert len(denied) == 1
     assert denied[0]["reason"] == "agent_role_required"

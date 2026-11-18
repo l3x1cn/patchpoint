@@ -23,15 +23,23 @@ echo "PatchPoint — demo end-to-end"
 echo "API: $API_URL"
 echo "Data: $(date -Iseconds)"
 
+# Hasło nie trafia do argumentów żadnego procesu (/proc/<pid>/cmdline czyta każdy użytkownik):
+# do jq idzie przez stdin z wbudowanego printf, a ciało żądania do curla przez stdin (@-).
+login_payload() {
+  printf '%s' "$DEMO_PASSWORD" | jq -Rsc --arg u "$1" '{username: $u, password: .}'
+}
+
 # request <oczekiwany_status> <słoik> <METODA> <ścieżka> [json]
 request() {
   local expected="$1" jar="$2" method="$3" path="$4" payload="${5:-}"
   local args=(-s --noproxy '*' -o "$BODY" -w '%{http_code}' -X "$method" -b "$WORKDIR/$jar.txt" -c "$WORKDIR/$jar.txt")
-  if [[ -n "$payload" ]]; then
-    args+=(-H 'Content-Type: application/json' -d "$payload")
-  fi
   local status
-  status=$(curl "${args[@]}" "$API_URL$path") || status="000"
+  if [[ -n "$payload" ]]; then
+    args+=(-H 'Content-Type: application/json' --data-binary @-)
+    status=$(curl "${args[@]}" "$API_URL$path" <<<"$payload") || status="000"
+  else
+    status=$(curl "${args[@]}" "$API_URL$path" </dev/null) || status="000"
+  fi
   echo "→ $method $path ($status)"
   if [[ "$status" != "$expected" ]]; then
     echo "BŁĄD: $method $path zwróciło $status, oczekiwano $expected"
@@ -50,7 +58,7 @@ jq -r '"status: \(.status)"' "$BODY"
 
 echo
 echo "==> Krok 2: Logowanie pracownika jan.kowalski"
-request 200 jan POST /api/auth/login "$(jq -n --arg u jan.kowalski --arg p "$DEMO_PASSWORD" '{username: $u, password: $p}')"
+request 200 jan POST /api/auth/login "$(login_payload jan.kowalski)"
 jq -r '"Zalogowano: \(.user.full_name) (rola: \(.user.role))"' "$BODY"
 
 echo
@@ -71,7 +79,7 @@ jq -r '.[] | "#\(.id) [\(.status)] \(.title)"' "$BODY"
 
 echo
 echo "==> Krok 5: Logowanie agenta helpdesk"
-request 200 helpdesk POST /api/auth/login "$(jq -n --arg u helpdesk --arg p "$DEMO_PASSWORD" '{username: $u, password: $p}')"
+request 200 helpdesk POST /api/auth/login "$(login_payload helpdesk)"
 HELPDESK_ID=$(jq -r '.user.id' "$BODY")
 jq -r '"Zalogowano: \(.user.full_name) (rola: \(.user.role), id: \(.user.id))"' "$BODY"
 

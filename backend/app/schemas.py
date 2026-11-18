@@ -137,3 +137,4 @@ class CommentResponse(BaseModel):
 
 class TicketDetailResponse(TicketResponse):
     comments: list[CommentResponse]
+    comment_count: int

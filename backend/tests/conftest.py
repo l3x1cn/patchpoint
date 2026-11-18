@@ -10,6 +10,7 @@ from app.config import Settings
 from app.database import connect, create_user, transaction
 from app.main import create_app
 from app.schemas import Role
+from app.security import hash_password
 from tests.support import (
     API_BASE_URL,
     DEFAULT_PASSWORD,
@@ -57,7 +58,7 @@ def user_factory(client: TestClient, settings: Settings) -> UserFactory:
             return create_user(
                 conn,
                 username=username,
-                password=password,
+                password_hash=hash_password(password),
                 full_name=full_name or username,
                 department="QA",
                 role=role,

@@ -21,7 +21,7 @@ from app.security import hash_password, password_policy_violation, verify_passwo
 from tests.support import DEFAULT_PASSWORD
 
 
-def count_users(database_path: Path) -> int:
+def count_all_users(database_path: Path) -> int:
     with closing(connect(database_path)) as conn:
         row = fetch_one(conn, "SELECT COUNT(*) AS n FROM users")
     assert row is not None
@@ -88,7 +88,7 @@ def test_demo_seed_rejects_weak_password(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="PATCHPOINT_DEMO_PASSWORD rejected"), TestClient(app):
         pass
 
-    assert count_users(database_path) == 0
+    assert count_all_users(database_path) == 0
 
 
 def test_transaction_rolls_back_on_error(client: TestClient, settings: Settings) -> None:
@@ -104,7 +104,7 @@ def test_transaction_rolls_back_on_error(client: TestClient, settings: Settings)
         )
         raise RuntimeError("boom")
 
-    assert count_users(settings.database_path) == 0
+    assert count_all_users(settings.database_path) == 0
 
 
 def test_transaction_rolls_back_after_failed_commit(tmp_path: Path) -> None:
