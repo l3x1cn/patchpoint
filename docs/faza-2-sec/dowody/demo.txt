@@ -1,7 +1,7 @@
 API_URL=http://127.0.0.1:8000 ./scripts/demo.sh
 PatchPoint — demo end-to-end
 API: http://127.0.0.1:8000
-Data: 2026-11-16T17:50:25+01:00
+Data: 2026-11-18T16:25:04+01:00
 
 ==> Krok 1: Sprawdzenie stanu API
 → GET /api/health (200)

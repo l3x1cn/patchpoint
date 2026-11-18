@@ -14,7 +14,7 @@ PatchPoint to system do zgłaszania awarii sprzętu IT przez pracowników do dzi
 
 ## Architektura w skrócie
 
-Statyczny frontend (`http://localhost:5500`) wywołuje przez `fetch` z cookie sesyjnym (`HttpOnly; Secure; SameSite=Strict`) API FastAPI (`http://localhost:8000`), które zapisuje dane w pliku SQLite. API przyjmuje żądania tylko z originów z listy `PATCHPOINT_CORS_ORIGINS` (domyślnie `http://localhost:5500`). Szczegóły, diagramy i opis API znajdują się w [raporcie z Fazy 1](docs/faza-1-dev/README.md), a opis zabezpieczeń w [raporcie z Fazy 2](docs/faza-2-sec/README.md).
+Statyczny frontend (`http://patchpoint.localhost:5500`) wywołuje przez `fetch` z cookie sesyjnym (`HttpOnly; Secure; SameSite=Strict`) API FastAPI (`http://patchpoint.localhost:8000`), które zapisuje dane w pliku SQLite. API odrzuca (403) żądania z nagłówkiem `Origin` spoza listy `PATCHPOINT_CORS_ORIGINS` (domyślnie `http://patchpoint.localhost:5500`), a żądania bez `Origin` (np. z `curl`) przyjmuje. [Raport z Fazy 1](docs/faza-1-dev/README.md) opisuje architekturę, diagramy i API w stanie z commita `ab08633`. Opis zabezpieczeń oraz bieżącego API (sekcja 7: zmiany względem Fazy 1 i tabela endpointów) zawiera [raport z Fazy 2](docs/faza-2-sec/README.md), a kontrakt wygenerowany przez FastAPI — [`docs/faza-2-sec/dowody/openapi.json`](docs/faza-2-sec/dowody/openapi.json).
 
 ## Struktura repozytorium
 
@@ -34,7 +34,7 @@ Statyczny frontend (`http://localhost:5500`) wywołuje przez `fetch` z cookie se
 │   │   ├── main.py           # fabryka aplikacji, CORS, nagłówki, limit ciała, ogólna obsługa błędów
 │   │   ├── config.py         # ustawienia ze zmiennych PATCHPOINT_*
 │   │   ├── audit.py          # logowanie zdarzeń bezpieczeństwa (JSON) i konfiguracja loggerów
-│   │   ├── middleware.py     # SecurityHeadersMiddleware (nagłówki bezpieczeństwa)
+│   │   ├── middleware.py     # SecurityHeadersMiddleware (nagłówki bezpieczeństwa), OriginCheckMiddleware (403 dla obcego Origin)
 │   │   ├── database.py       # połączenie SQLite, transaction()/run(), wersja schematu, dane demo
 │   │   ├── schema.sql        # tabele users, sessions, login_failures, tickets, comments; user_version
 │   │   ├── schemas.py        # modele Pydantic (walidacja i limity) i enumy
@@ -46,7 +46,7 @@ Statyczny frontend (`http://localhost:5500`) wywołuje przez `fetch` z cookie se
 ├── frontend/                 # statyczny klient: index.html (z CSP), app.js, styles.css
 ├── scripts/
 │   ├── demo.sh               # scenariusz end-to-end przez curl i jq
-│   └── security_check.sh     # PoC regresji bezpieczeństwa: 22 sprawdzenia, [PODATNE]/[NAPRAWIONE]
+│   └── security_check.sh     # PoC regresji bezpieczeństwa: 22 sprawdzenia, [PODATNE]/[NAPRAWIONE]/[POMINIĘTE]
 └── docs/
     ├── faza-1-dev/           # raport Fazy 1, dziennik promptów, rejestr słabości, dowody
     ├── faza-2-sec/           # raport Fazy 2, audyt Red Team, threat model, dziennik promptów, dowody
@@ -62,14 +62,14 @@ Statyczny frontend (`http://localhost:5500`) wywołuje przez `fetch` z cookie se
 - make,
 - curl i jq (do `make demo` i `make security-check`),
 - python3 (do `make security-check`),
-- przeglądarka. Chrome i Firefox przyjmują ciasteczko `Secure` na `http://localhost`; Safari nie — w nim uruchom API z `PATCHPOINT_COOKIE_SECURE=false`.
+- przeglądarka. Chrome i Firefox przyjmują ciasteczko `Secure` na `http://*.localhost` (w tym `patchpoint.localhost`) i rozwiązują nazwy `*.localhost` na pętlę zwrotną; Safari nie przyjmuje `Secure` bez TLS — w nim uruchom API z `PATCHPOINT_COOKIE_SECURE=false`.
 
 ## Szybki start
 
 ```bash
 make install     # instalacja zależności (uv sync)
-make run         # API: http://localhost:8000, startuje z pustą bazą bez kont
-make frontend    # w drugim terminalu; UI: http://localhost:5500
+make run         # API: http://patchpoint.localhost:8000, startuje z pustą bazą bez kont
+make frontend    # w drugim terminalu; UI: http://patchpoint.localhost:5500
 make test        # testy z pokryciem (próg 80%)
 ```
 
@@ -84,12 +84,14 @@ W drugim terminalu, z tym samym hasłem:
 
 ```bash
 DEMO_PASSWORD="$PATCHPOINT_DEMO_PASSWORD" make demo   # scenariusz end-to-end; wymaga działającego API z danymi demo
-make security-check                                    # PoC bezpieczeństwa; wymaga działającego API
+make security-check                                    # PoC bezpieczeństwa; wymaga działającego API; bez DB_PATH i API_LOG W-18 i SEC-020 są [POMINIĘTE]
 ```
 
-Swagger (`http://localhost:8000/docs`) jest dostępny tylko po uruchomieniu API z `PATCHPOINT_DOCS_ENABLED=true`.
+Bez `DB_PATH` i `API_LOG` skrypt zgłasza W-18 i SEC-020 jako `[POMINIĘTE]`, a W-07 i W-09 sprawdza tylko przez API. API pisze logi na stderr, więc do pełnych 22 sprawdzeń uruchom je z kopią logu w pliku: `mkdir -p backend/data && PATCHPOINT_SEED_DEMO_DATA=true make run 2>&1 | tee backend/data/api.log`, a w drugim terminalu `DB_PATH=backend/data/patchpoint.db API_LOG=backend/data/api.log make security-check`. `DB_PATH` musi wskazywać bazę uruchomionego API (`PATCHPOINT_DATABASE_PATH`; czytają ją W-07, W-09 i SEC-020), a `API_LOG` plik z jego stderr (W-18 szuka w nim zdarzenia `login_failed`).
 
-Interfejs otwieraj przez `http://localhost:5500` (nie `127.0.0.1`), aby cookie sesyjne z `localhost:8000` było przesyłane z żądaniami, a origin zgadzał się z listą CORS.
+Swagger (`http://patchpoint.localhost:8000/docs`) jest dostępny tylko po uruchomieniu API z `PATCHPOINT_DOCS_ENABLED=true`.
+
+Interfejs otwieraj przez `http://patchpoint.localhost:5500` (nie przez `localhost` ani `127.0.0.1`). Ciasteczko sesyjne nie ma atrybutu `Domain`, więc przeglądarka wysyła je do hosta `patchpoint.localhost` na każdym porcie (RFC 6265 §8.5: ciasteczka nie są izolowane portem). Gdyby UI i API działały pod `localhost`, ciasteczko trafiałoby do każdej innej aplikacji na `http://localhost:<port>`, bo to ta sama witryna. `patchpoint.localhost` jest osobną witryną od `localhost`, więc takie aplikacje go nie dostają. Origin UI musi też zgadzać się z listą CORS i z `API_BASE_URL` w `frontend/app.js`. `make demo` i `make security-check` używają `curl` i domyślnie łączą się z `http://127.0.0.1:8000` (`API_URL`); nie zależą od tej nazwy.
 
 Reset danych: usuń plik `backend/data/patchpoint.db`.
 
@@ -107,7 +109,7 @@ Zmienne środowiskowe:
 | `PATCHPOINT_SEED_DEMO_DATA` | tworzenie kont i zgłoszeń demo na pustej bazie | `false` |
 | `PATCHPOINT_DEMO_PASSWORD` | hasło kont demo; wymagane przy `PATCHPOINT_SEED_DEMO_DATA=true`, co najmniej 15 znaków, bez loginów kont demo | brak |
 | `PATCHPOINT_DOCS_ENABLED` | udostępnia `/docs`, `/redoc` i `/openapi.json` | `false` |
-| `PATCHPOINT_CORS_ORIGINS` | dozwolone originy CORS (lista JSON); `*` jest odrzucane | `["http://localhost:5500"]` |
+| `PATCHPOINT_CORS_ORIGINS` | dozwolone originy CORS (lista JSON); `*` jest odrzucane | `["http://patchpoint.localhost:5500"]` |
 | `PATCHPOINT_COOKIE_SECURE` | atrybut `Secure` ciasteczka sesyjnego | `true` |
 | `PATCHPOINT_SESSION_IDLE_MINUTES` | wygaśnięcie sesji po bezczynności | `30` |
 | `PATCHPOINT_SESSION_ABSOLUTE_MINUTES` | maksymalny czas życia sesji | `480` |
@@ -130,14 +132,14 @@ Konta powstają tylko przy `PATCHPOINT_SEED_DEMO_DATA=true`; hasło wszystkich k
 | Cel | Działanie |
 |---|---|
 | `make install` | instaluje zależności backendu (`uv sync`) |
-| `make run` | uruchamia API na `127.0.0.1:8000` (`API_HOST`, `API_PORT`) |
+| `make run` | uruchamia API na `127.0.0.1:8000` (`API_HOST`, `API_PORT`) z `--no-proxy-headers`, więc `X-Forwarded-For` nie zmienia `client_ip` w logach |
 | `make test` | uruchamia testy pytest z raportem pokrycia |
 | `make lint` | `ruff check` (z regułami bezpieczeństwa `S`) i `ruff format --check` |
 | `make format` | `ruff format` i `ruff check --fix` |
 | `make typecheck` | `mypy` (tryb strict) dla `app` i `tests` |
 | `make frontend` | serwuje `frontend/` na `127.0.0.1:5500` (`FRONTEND_PORT`) |
 | `make demo` | uruchamia `scripts/demo.sh` względem `API_URL` (domyślnie `http://127.0.0.1:8000`); wymaga `DEMO_PASSWORD` |
-| `make security-check` | uruchamia `scripts/security_check.sh` względem `API_URL`: 22 sprawdzenia regresji bezpieczeństwa |
+| `make security-check` | uruchamia `scripts/security_check.sh` względem `API_URL`: 22 sprawdzenia regresji bezpieczeństwa; W-18 wymaga `API_LOG` (plik ze stderr API), SEC-020 wymaga `DB_PATH` (baza API), bez nich są `[POMINIĘTE]` |
 
 ## Dokumentacja
 

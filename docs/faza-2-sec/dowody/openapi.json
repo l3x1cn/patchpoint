@@ -732,6 +732,10 @@
             },
             "type": "array",
             "title": "Comments"
+          },
+          "comment_count": {
+            "type": "integer",
+            "title": "Comment Count"
           }
         },
         "type": "object",
@@ -750,7 +754,8 @@
           "assignee_name",
           "created_at",
           "updated_at",
-          "comments"
+          "comments",
+          "comment_count"
         ],
         "title": "TicketDetailResponse"
       },

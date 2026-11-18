@@ -1,7 +1,7 @@
 PatchPoint — kontrola regresji bezpieczeństwa
 API_URL: http://127.0.0.1:8000
 FRONTEND_DIR: /home/lex/Projects/patchpoint/scripts/../frontend
-Data: 2026-11-16T17:50:25+01:00
+Data: 2026-11-18T16:24:55+01:00
 
 [NAPRAWIONE] W-01 Gadatliwy błąd bazy — search=O'Brien daje HTTP 200 bez SQL i tracebacku
 [NAPRAWIONE] W-02 Komunikat SQLite przy zajętym loginie — ponowna rejestracja daje HTTP 409 bez szczegółów bazy
@@ -16,7 +16,7 @@ Data: 2026-11-16T17:50:25+01:00
 [NAPRAWIONE] W-11 Ciasteczko bez flag, token w JSON i Bearer — ciasteczko HttpOnly, Secure, SameSite=Strict; brak tokenu w JSON; Bearer daje 401
 [NAPRAWIONE] W-12 Konto domyślne, brak polityki haseł i limitu prób — admin/admin123=401, puste hasło przy rejestracji=422, szósta zła próba=429
 [NAPRAWIONE] W-13 CORS odbija dowolny Origin — preflight z Origin http://evil.example bez Access-Control-Allow-Origin (HTTP 400)
-[NAPRAWIONE] W-14 SQL injection w wyszukiwaniu — HTTP 200, wynik nie zawiera cudzego zgłoszenia #6
+[NAPRAWIONE] W-14 SQL injection w wyszukiwaniu — HTTP 200, wynik nie zawiera cudzego zgłoszenia #5
 [NAPRAWIONE] W-15 Nadanie roli przy rejestracji — rejestracja z role=agent odrzucona lub bez roli agenta (HTTP 422)
 [NAPRAWIONE] W-16 IDOR na zgłoszeniach — cudze zgłoszenie: odczyt HTTP 404, komentarz HTTP 404
 [NAPRAWIONE] W-17 XSS przez innerHTML — app.js bez innerHTML, index.html ma Content-Security-Policy

@@ -5,7 +5,7 @@ Cel dokumentu to weryfikacja znalezisk audytu Red Team dla wektorów scenariusza
 ## 1. Zakres i założenia
 
 - Analizowany jest stan kodu Fazy 1 (drzewo commita `ab08633`).
-- Uruchomienie lokalne: UI `http://localhost:5500`, API `http://localhost:8000`, plik SQLite.
+- Uruchomienie lokalne w Fazie 1: UI `http://localhost:5500`, API `http://localhost:8000`, plik SQLite. Od naprawy SEC-001 (review końcowy Fazy 2) UI i API działają pod `http://patchpoint.localhost:5500` i `http://patchpoint.localhost:8000`; powód opisuje scenariusz CORS-2.
 - Poza zakresem: TLS, hosting i łańcuch dostaw zależności (A03). Te tematy należą do Fazy 3 (Dockerfile, CI z Semgrep i Trivy, architektura sieci).
 
 ## 2. Model systemu
@@ -14,11 +14,11 @@ Cel dokumentu to weryfikacja znalezisk audytu Red Team dla wektorów scenariusza
 flowchart LR
     subgraph TB1["TB1: przeglądarka użytkownika"]
         user["Pracownik / agent Helpdesk"]
-        ui["Frontend<br/>origin http://localhost:5500"]
+        ui["Frontend<br/>origin http://patchpoint.localhost:5500"]
         evil["Obca strona w tej samej przeglądarce<br/>np. http://localhost:3000"]
     end
     subgraph TB2["TB2: proces API"]
-        api["Backend FastAPI<br/>http://localhost:8000"]
+        api["Backend FastAPI<br/>http://patchpoint.localhost:8000"]
     end
     subgraph TB3["TB3: system plików serwera"]
         db[("SQLite<br/>users, sessions, tickets, comments")]
@@ -87,7 +87,7 @@ Stan Fazy 1, przepisany z routerów `health`, `auth` i `tickets`.
 | I | odczyt cudzych zgłoszeń i zrzut bazy | API, SQLite | T2 | RT-04, RT-01 / W-16, W-14 |
 | I | enumeracja kont | API (logowanie) | T1 | RT-12 / W-05 |
 | I | tokeny sesji jawnym tekstem w bazie | SQLite | T4 | SEC-020 (code review; rekomendacja w RT-03) |
-| D | brak limitów długości pól i rozmiaru żądań, lista bez paginacji | API | T2 | SEC-017 (code review; w audycie odnotowane jako CWE-770) |
+| D | brak limitów długości pól i rozmiaru żądań, lista bez paginacji; szczegóły zgłoszenia zwracały wszystkie komentarze (SEC-002 z code review Fazy 2; teraz najnowsze 50 i `comment_count`) | API | T2 | SEC-017 (code review; w audycie odnotowane jako CWE-770) |
 | D/I | nieobsłużony `OverflowError` dla identyfikatorów > 2⁶³−1 | API | T2 | RT-13 |
 | E | pracownik → agent (rejestracja z rolą lub przejęcie sesji agenta) | API | T1, T2 | RT-02, RT-01, RT-03, RT-05 |
 | (mitigacje) | brak CSP i nagłówków ochronnych; HTTP bez TLS | przeglądarka, API | T3, T5 | RT-16 / SEC-021 |
@@ -227,8 +227,16 @@ flowchart TD
 - Aktor: T3.
 - Kroki: strona na innym porcie `localhost` (ten sam site, więc cookie `Lax` jest wysyłane) robi `fetch` z `credentials: "include"` → RT-06 odbija `Origin` → odczyt `/api/auth/me` z hashem i listy zgłoszeń.
 - Skutek: odczyt danych zalogowanego użytkownika przez obcą stronę.
-- Faza 2 przerywa przez: listę originów z konfiguracji (bez `*`), `SameSite=Strict`, metody GET/POST/PATCH i nagłówek `Content-Type`; preflight z obcego originu dostaje 400.
-- Ryzyko rezydualne: proste żądanie `POST /api/auth/logout` z tego samego site nadal może wylogować.
+- Faza 2 przerywa przez: listę originów z konfiguracji (bez `*`), kontrolę nagłówka `Origin` (403 dla originu spoza listy, także dla prostych żądań), `SameSite=Strict`, metody GET/POST/PATCH i nagłówek `Content-Type`; preflight z obcego originu dostaje 400.
+- Ryzyko rezydualne: lista originów i `SameSite=Strict` nie chronią samego ciasteczka przed obcą aplikacją na innym porcie tego samego hosta: patrz CORS-2.
+
+**CORS-2 „Ciasteczko wysyłane na każdy port hosta” (SEC-001)**
+
+- Aktor: T3, czyli własny serwer HTTP na `http://localhost:3000` (albo dowolna strona, która ładuje z niego zasób).
+- Kroki: ciasteczka nie są izolowane portem (RFC 6265 §8.5), a `set_cookie` bez `Domain` tworzy ciasteczko hosta `localhost`. Gdy UI i API działały pod `localhost`, przeglądarka wysyłała `Cookie: session=<token>` także do każdego żądania na `localhost:3000`, bo inny port to ta sama witryna, więc `SameSite=Strict` go nie zatrzymuje. `HttpOnly` ukrywa ciasteczko przed JavaScriptem, ale nie przed serwerem, który je odbiera. Serwer odtwarza token wobec API. `Secure` nie pomaga, bo `http://localhost` jest kontekstem bezpiecznym.
+- Skutek: przejęcie sesji na czas do 30 minut bezczynności i najwyżej 8 godzin; omija `HttpOnly`, listę CORS i `SameSite`.
+- Faza 2 przerywa przez: lokalnie UI i API działają pod `patchpoint.localhost`, który jest osobną witryną od `localhost`, więc aplikacje na `localhost:<port>` nie dostają ciasteczka (`API_BASE_URL` w `frontend/app.js`, domyślna lista `PATCHPOINT_CORS_ORIGINS`, CSP `connect-src` w `frontend/index.html`). Ciasteczko pozostaje hostowe (bez `Domain`), co sprawdza `test_auth.py::test_session_cookie_is_host_only`; spójność nazwy sprawdza `test_cors.py::test_frontend_calls_the_api_on_the_dedicated_hostname`.
+- Ryzyko rezydualne: izolacji portem nadal nie ma. Inna aplikacja uruchomiona pod `patchpoint.localhost:<port>` dostałaby ciasteczko. Na Fazę 3: dedykowany origin HTTPS, prefiks `__Host-` i UI z API pod jednym originem za reverse proxy. Skuteczność w przeglądarce nie była testowana (podstawa: kod i RFC).
 
 ## 7. Priorytety i plan naprawy
 
