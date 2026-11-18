@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
 
@@ -7,16 +7,30 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.config import Settings
-from app.database import connect, create_user
+from app.database import connect, create_user, transaction
 from app.main import create_app
 from app.schemas import Role
-
-DEFAULT_PASSWORD = "Secret123!"
+from app.security import hash_password
+from tests.support import (
+    API_BASE_URL,
+    DEFAULT_PASSWORD,
+    DEMO_PASSWORD,
+    LoginAs,
+    TicketFactory,
+    UserFactory,
+)
 
 
 @pytest.fixture
 def settings(tmp_path: Path) -> Settings:
-    return Settings(database_path=tmp_path / "test.db", seed_demo_data=False)
+    return Settings(database_path=tmp_path / "test.db")
+
+
+@pytest.fixture
+def seeded_settings(tmp_path: Path) -> Settings:
+    return Settings(
+        database_path=tmp_path / "seeded.db", seed_demo_data=True, demo_password=DEMO_PASSWORD
+    )
 
 
 @pytest.fixture
@@ -26,12 +40,13 @@ def app(settings: Settings) -> FastAPI:
 
 @pytest.fixture
 def client(app: FastAPI) -> Iterator[TestClient]:
-    with TestClient(app) as test_client:
+    # The session cookie is Secure, so the client must talk to an https origin.
+    with TestClient(app, base_url=API_BASE_URL) as test_client:
         yield test_client
 
 
 @pytest.fixture
-def user_factory(client: TestClient, settings: Settings) -> Callable[..., int]:
+def user_factory(client: TestClient, settings: Settings) -> UserFactory:
     def create(
         username: str,
         *,
@@ -39,11 +54,11 @@ def user_factory(client: TestClient, settings: Settings) -> Callable[..., int]:
         password: str = DEFAULT_PASSWORD,
         full_name: str | None = None,
     ) -> int:
-        with closing(connect(settings.database_path)) as conn:
+        with closing(connect(settings.database_path)) as conn, transaction(conn):
             return create_user(
                 conn,
                 username=username,
-                password=password,
+                password_hash=hash_password(password),
                 full_name=full_name or username,
                 department="QA",
                 role=role,
@@ -53,11 +68,11 @@ def user_factory(client: TestClient, settings: Settings) -> Callable[..., int]:
 
 
 @pytest.fixture
-def login_as(app: FastAPI, client: TestClient) -> Iterator[Callable[..., TestClient]]:
+def login_as(app: FastAPI, client: TestClient) -> Iterator[LoginAs]:
     clients: list[TestClient] = []
 
     def login(username: str, password: str = DEFAULT_PASSWORD) -> TestClient:
-        session_client = TestClient(app)
+        session_client = TestClient(app, base_url=API_BASE_URL)
         clients.append(session_client)
         response = session_client.post(
             "/api/auth/login", json={"username": username, "password": password}
@@ -72,7 +87,7 @@ def login_as(app: FastAPI, client: TestClient) -> Iterator[Callable[..., TestCli
 
 
 @pytest.fixture
-def ticket_factory() -> Callable[..., int]:
+def ticket_factory() -> TicketFactory:
     def create(
         client: TestClient,
         *,

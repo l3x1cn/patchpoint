@@ -1,0 +1,62 @@
+API_URL=http://127.0.0.1:8000 ./scripts/demo.sh
+PatchPoint — demo end-to-end
+API: http://127.0.0.1:8000
+Data: 2026-11-18T16:25:04+01:00
+
+==> Krok 1: Sprawdzenie stanu API
+→ GET /api/health (200)
+status: ok
+
+==> Krok 2: Logowanie pracownika jan.kowalski
+→ POST /api/auth/login (200)
+Zalogowano: Jan Kowalski (rola: employee)
+
+==> Krok 3: Jan tworzy nowe zgłoszenie
+→ POST /api/tickets (201)
+Zgłoszenie #4, status: open
+
+==> Krok 4: Jan pobiera swoją listę zgłoszeń
+→ GET /api/tickets (200)
+Liczba zgłoszeń Jana: 3
+#4 [open] Stacja dokująca nie wykrywa monitorów
+#2 [in_progress] Drukarka zacina papier
+#1 [open] Laptop nie uruchamia się po aktualizacji
+
+==> Krok 5: Logowanie agenta helpdesk
+→ POST /api/auth/login (200)
+Zalogowano: Piotr Serwisant (rola: agent, id: 1)
+
+==> Krok 6: Helpdesk pobiera wszystkie zgłoszenia
+→ GET /api/tickets (200)
+Liczba wszystkich zgłoszeń: 4
+
+==> Krok 7: Helpdesk podejmuje zgłoszenie i przypisuje je do siebie
+→ PATCH /api/tickets/4 (200)
+status: in_progress, przypisany: Piotr Serwisant
+
+==> Krok 8: Helpdesk dodaje komentarz
+→ POST /api/tickets/4/comments (201)
+Komentarz #2 dodany przez: Piotr Serwisant
+
+==> Krok 9: Jan sprawdza szczegóły zgłoszenia
+→ GET /api/tickets/4 (200)
+status: in_progress, przypisany: Piotr Serwisant
+komentarz (Piotr Serwisant): Sprawdzam sterowniki stacji dokującej — proszę nie odłączać laptopa.
+
+==> Krok 10: Helpdesk rozwiązuje i zamyka zgłoszenie
+→ PATCH /api/tickets/4 (200)
+→ PATCH /api/tickets/4 (200)
+Status końcowy: closed
+
+==> Krok 11: Jan wyszukuje zgłoszenia frazą „dokuj”
+→ GET /api/tickets?search=dokuj (200)
+trafienie: #4 Stacja dokująca nie wykrywa monitorów
+Nowe zgłoszenie #4 jest wśród wyników
+
+==> Krok 12: Jan wylogowuje się
+→ POST /api/auth/logout (200)
+Logged out
+→ GET /api/auth/me (401)
+Sesja zakończona (HTTP 401)
+
+DEMO ZAKOŃCZONE POWODZENIEM

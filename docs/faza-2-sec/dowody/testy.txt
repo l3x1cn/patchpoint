@@ -1,0 +1,44 @@
+cd backend && uv run pytest
+============================= test session starts ==============================
+platform linux -- Python 3.14.10, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/lex/Projects/patchpoint/backend
+configfile: pyproject.toml
+testpaths: tests
+plugins: cov-7.1.0, anyio-4.16.0
+collected 137 items
+
+tests/test_auth.py .............................                         [ 21%]
+tests/test_auth_concurrency.py ....                                      [ 24%]
+tests/test_client_ip.py .                                                [ 24%]
+tests/test_cors.py ..........                                            [ 32%]
+tests/test_database.py .............                                     [ 41%]
+tests/test_errors.py ...                                                 [ 43%]
+tests/test_health.py .                                                   [ 44%]
+tests/test_platform.py ...........                                       [ 52%]
+tests/test_sessions.py ........                                          [ 58%]
+tests/test_ticket_security.py ........................                   [ 75%]
+tests/test_tickets.py .................................                  [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.14.10-final-0 _______________
+
+Name                      Stmts   Miss  Cover   Missing
+-------------------------------------------------------
+app/__init__.py               0      0   100%
+app/audit.py                 18      0   100%
+app/config.py                30      0   100%
+app/database.py             111      5    95%   128-129, 136-137, 191
+app/dependencies.py          36      0   100%
+app/main.py                  51      1    98%   48
+app/middleware.py            39      0   100%
+app/routers/__init__.py       0      0   100%
+app/routers/auth.py          61      2    97%   62, 74
+app/routers/health.py         9      0   100%
+app/routers/tickets.py       78      1    99%   255
+app/schemas.py               66      0   100%
+app/security.py              31      0   100%
+app/sessions.py              59      1    98%   94
+-------------------------------------------------------
+TOTAL                       589     10    98%
+Required test coverage of 80% reached. Total coverage: 98.30%
+============================= 137 passed in 13.84s =============================

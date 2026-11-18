@@ -1,7 +1,13 @@
 from datetime import datetime
 from enum import StrEnum
+from typing import Final, Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app.security import PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, password_policy_violation
+
+USERNAME_PATTERN: Final = r"^[A-Za-z0-9._@+-]+$"
+MAX_SQLITE_INTEGER: Final = 2**63 - 1
 
 
 class Role(StrEnum):
@@ -10,11 +16,20 @@ class Role(StrEnum):
 
 
 class UserCreate(BaseModel):
-    username: str = Field(min_length=3, max_length=50)
-    password: str
-    full_name: str = Field(min_length=1)
-    department: str = ""
-    role: Role = Role.EMPLOYEE
+    model_config = ConfigDict(extra="forbid")
+
+    username: str = Field(min_length=3, max_length=50, pattern=USERNAME_PATTERN)
+    password: str = Field(min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
+    full_name: str = Field(min_length=1, max_length=100)
+    department: str = Field(default="", max_length=100)
+
+    @model_validator(mode="after")
+    def enforce_password_policy(self) -> Self:
+        violation = password_policy_violation(self.password, self.username)
+        if violation is not None:
+            raise ValueError(violation)
+
+        return self
 
 
 class UserResponse(BaseModel):
@@ -24,16 +39,16 @@ class UserResponse(BaseModel):
     department: str
     role: Role
     created_at: datetime
-    password_hash: str
 
 
 class LoginRequest(BaseModel):
-    username: str
-    password: str
+    model_config = ConfigDict(extra="forbid")
+
+    username: str = Field(min_length=1, max_length=50)
+    password: str = Field(min_length=1, max_length=PASSWORD_MAX_LENGTH)
 
 
 class LoginResponse(BaseModel):
-    token: str
     user: UserResponse
 
 
@@ -43,10 +58,6 @@ class MessageResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
-    version: str
-    database: str
-    sqlite_version: str
-    python_version: str
 
 
 class TicketCategory(StrEnum):
@@ -74,18 +85,22 @@ class TicketStatus(StrEnum):
 
 
 class TicketCreate(BaseModel):
-    title: str = Field(min_length=1)
-    description: str = Field(min_length=1)
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(min_length=1, max_length=5000)
     category: TicketCategory
     priority: TicketPriority = TicketPriority.MEDIUM
-    asset_tag: str | None = None
-    location: str | None = None
+    asset_tag: str | None = Field(default=None, max_length=50)
+    location: str | None = Field(default=None, max_length=100)
 
 
 class TicketUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     status: TicketStatus | None = None
     priority: TicketPriority | None = None
-    assignee_id: int | None = None
+    assignee_id: int | None = Field(default=None, ge=1, le=MAX_SQLITE_INTEGER)
 
 
 class TicketResponse(BaseModel):
@@ -106,7 +121,9 @@ class TicketResponse(BaseModel):
 
 
 class CommentCreate(BaseModel):
-    body: str = Field(min_length=1)
+    model_config = ConfigDict(extra="forbid")
+
+    body: str = Field(min_length=1, max_length=2000)
 
 
 class CommentResponse(BaseModel):
@@ -120,3 +137,4 @@ class CommentResponse(BaseModel):
 
 class TicketDetailResponse(TicketResponse):
     comments: list[CommentResponse]
+    comment_count: int

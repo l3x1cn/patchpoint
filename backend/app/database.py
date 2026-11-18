@@ -1,33 +1,118 @@
 import sqlite3
-from collections.abc import Sequence
-from contextlib import closing
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import closing, contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Final
+from typing import Final, NamedTuple
 
-from app.schemas import Role, TicketCategory, TicketPriority, TicketStatus
-from app.security import hash_password
+from app.audit import log_security_event
+from app.schemas import Role, TicketCategory, TicketPriority, TicketStatus, UserResponse
+from app.security import hash_password, password_policy_violation
 
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
+SCHEMA_VERSION: Final = 2
+USER_COLUMNS: Final = ("id", "username", "full_name", "department", "role", "created_at")
+
+type SqlParams = Sequence[object] | Mapping[str, object]
+
+
+class DemoUser(NamedTuple):
+    username: str
+    full_name: str
+    department: str
+    role: Role
+
+
+class DemoTicket(NamedTuple):
+    title: str
+    description: str
+    category: TicketCategory
+    priority: TicketPriority
+    status: TicketStatus
+    asset_tag: str
+    location: str
+    reporter: str
+    assignee: str | None
+
+
+class DemoComment(NamedTuple):
+    ticket_title: str
+    author: str
+    body: str
+
 
 DEMO_USERS: Final = (
-    ("admin", "admin123", "Administrator Systemu", "IT", Role.AGENT),
-    ("helpdesk", "helpdesk123", "Piotr Serwisant", "IT Helpdesk", Role.AGENT),
-    ("jan.kowalski", "password123", "Jan Kowalski", "Księgowość", Role.EMPLOYEE),
-    ("anna.nowak", "password123", "Anna Nowak", "Marketing", Role.EMPLOYEE),
+    DemoUser("helpdesk", "Piotr Serwisant", "IT Helpdesk", Role.AGENT),
+    DemoUser("jan.kowalski", "Jan Kowalski", "Księgowość", Role.EMPLOYEE),
+    DemoUser("anna.nowak", "Anna Nowak", "Marketing", Role.EMPLOYEE),
+)
+
+DEMO_TICKETS: Final = (
+    DemoTicket(
+        title="Laptop nie uruchamia się po aktualizacji",
+        description="Po nocnej aktualizacji systemu laptop zatrzymuje się na logo producenta.",
+        category=TicketCategory.LAPTOP,
+        priority=TicketPriority.HIGH,
+        status=TicketStatus.OPEN,
+        asset_tag="LAP-0042",
+        location="B-204",
+        reporter="jan.kowalski",
+        assignee=None,
+    ),
+    DemoTicket(
+        title="Drukarka zacina papier",
+        description="Drukarka sieciowa na 2. piętrze zacina papier przy druku dwustronnym.",
+        category=TicketCategory.PRINTER,
+        priority=TicketPriority.MEDIUM,
+        status=TicketStatus.IN_PROGRESS,
+        asset_tag="PRN-0007",
+        location="Korytarz, 2. piętro",
+        reporter="jan.kowalski",
+        assignee="helpdesk",
+    ),
+    DemoTicket(
+        title="Migający monitor",
+        description="Monitor zewnętrzny miga co kilka sekund po podłączeniu przez HDMI.",
+        category=TicketCategory.MONITOR,
+        priority=TicketPriority.LOW,
+        status=TicketStatus.OPEN,
+        asset_tag="MON-0113",
+        location="C-012",
+        reporter="anna.nowak",
+        assignee=None,
+    ),
+)
+
+DEMO_COMMENTS: Final = (
+    DemoComment(
+        ticket_title="Drukarka zacina papier",
+        author="helpdesk",
+        body="Zamówiono nowy podajnik papieru, wymiana planowana na piątek.",
+    ),
 )
 
 
 class DatabaseError(Exception):
-    def __init__(self, sql: str, params: Sequence[object], original: sqlite3.Error) -> None:
+    def __init__(self, sql: str, original: sqlite3.Error) -> None:
         super().__init__(str(original))
         self.sql = sql
-        self.params = params
         self.original = original
 
 
+class SchemaVersionError(RuntimeError):
+    pass
+
+
+def utc_now() -> datetime:
+    return datetime.now(UTC).replace(microsecond=0)
+
+
+def isoformat(moment: datetime) -> str:
+    return moment.isoformat(timespec="seconds")
+
+
 def utc_now_iso() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds")
+    return isoformat(utc_now())
 
 
 def connect(database_path: Path) -> sqlite3.Connection:
@@ -37,168 +122,161 @@ def connect(database_path: Path) -> sqlite3.Connection:
     return conn
 
 
-def fetch_one(
-    conn: sqlite3.Connection, sql: str, params: Sequence[object] = ()
-) -> sqlite3.Row | None:
+def fetch_one(conn: sqlite3.Connection, sql: str, params: SqlParams = ()) -> sqlite3.Row | None:
     try:
         row: sqlite3.Row | None = conn.execute(sql, params).fetchone()
     except sqlite3.Error as exc:
-        raise DatabaseError(sql, params, exc) from exc
+        raise DatabaseError(sql, exc) from exc
     return row
 
 
-def fetch_all(
-    conn: sqlite3.Connection, sql: str, params: Sequence[object] = ()
-) -> list[sqlite3.Row]:
+def fetch_all(conn: sqlite3.Connection, sql: str, params: SqlParams = ()) -> list[sqlite3.Row]:
     try:
         rows: list[sqlite3.Row] = conn.execute(sql, params).fetchall()
     except sqlite3.Error as exc:
-        raise DatabaseError(sql, params, exc) from exc
+        raise DatabaseError(sql, exc) from exc
     return rows
 
 
-def execute(conn: sqlite3.Connection, sql: str, params: Sequence[object] = ()) -> int:
+def run(conn: sqlite3.Connection, sql: str, params: SqlParams = ()) -> int:
+    """Execute a write statement without committing; call inside `transaction`."""
     try:
         cursor = conn.execute(sql, params)
-        conn.commit()
     except sqlite3.Error as exc:
-        raise DatabaseError(sql, params, exc) from exc
+        raise DatabaseError(sql, exc) from exc
     return cursor.lastrowid or 0
+
+
+@contextmanager
+def transaction(conn: sqlite3.Connection) -> Iterator[None]:
+    """Commit the writes of the block; roll back if the block or the commit fails."""
+    committed = False
+    try:
+        yield
+
+        try:
+            conn.commit()
+        except sqlite3.Error as exc:
+            raise DatabaseError("COMMIT", exc) from exc
+        committed = True
+    finally:
+        if not committed:
+            conn.rollback()
+
+
+def user_from_row(row: sqlite3.Row) -> UserResponse:
+    return UserResponse.model_validate({column: row[column] for column in USER_COLUMNS})
 
 
 def create_user(
     conn: sqlite3.Connection,
     *,
     username: str,
-    password: str,
+    password_hash: str,
     full_name: str,
     department: str,
     role: Role,
 ) -> int:
-    return execute(
+    return run(
         conn,
         "INSERT INTO users (username, password_hash, full_name, department, role, created_at) "
         "VALUES (?, ?, ?, ?, ?, ?)",
-        (username, hash_password(password), full_name, department, role.value, utc_now_iso()),
+        (username, password_hash, full_name, department, role.value, utc_now_iso()),
     )
 
 
-def insert_demo_ticket(
-    conn: sqlite3.Connection,
-    *,
-    title: str,
-    description: str,
-    category: TicketCategory,
-    priority: TicketPriority,
-    status: TicketStatus,
-    asset_tag: str,
-    location: str,
-    reporter_username: str,
-    assignee_username: str | None,
-) -> int:
-    reporter = fetch_one(conn, "SELECT id FROM users WHERE username = ?", (reporter_username,))
-    assignee = (
-        fetch_one(conn, "SELECT id FROM users WHERE username = ?", (assignee_username,))
-        if assignee_username
-        else None
-    )
-    if reporter is None:
-        raise ValueError(f"Unknown demo user: {reporter_username}")
+def _user_id(conn: sqlite3.Connection, username: str) -> int:
+    row = fetch_one(conn, "SELECT id FROM users WHERE username = ?", (username,))
+    if row is None:
+        raise ValueError(f"Unknown demo user: {username}")
 
-    now = utc_now_iso()
-    return execute(
-        conn,
-        "INSERT INTO tickets (title, description, category, priority, status, asset_tag, "
-        "location, reporter_id, assignee_id, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (
-            title,
-            description,
-            category.value,
-            priority.value,
-            status.value,
-            asset_tag,
-            location,
-            reporter["id"],
-            assignee["id"] if assignee else None,
-            now,
-            now,
-        ),
-    )
+    user_id: int = row["id"]
+    return user_id
 
 
-def seed_demo_data(conn: sqlite3.Connection) -> None:
+def seed_demo_data(conn: sqlite3.Connection, *, password: str) -> None:
+    for user in DEMO_USERS:
+        violation = password_policy_violation(password, user.username)
+        if violation is not None:
+            raise ValueError(
+                f"PATCHPOINT_DEMO_PASSWORD rejected for demo user {user.username}: {violation}"
+            )
+
     row = fetch_one(conn, "SELECT COUNT(*) AS n FROM users")
     if row is None or row["n"] != 0:
         return
 
-    for username, password, full_name, department, role in DEMO_USERS:
-        create_user(
-            conn,
-            username=username,
-            password=password,
-            full_name=full_name,
-            department=department,
-            role=role,
+    with transaction(conn):
+        for user in DEMO_USERS:
+            create_user(
+                conn,
+                username=user.username,
+                password_hash=hash_password(password),
+                full_name=user.full_name,
+                department=user.department,
+                role=user.role,
+            )
+
+        ticket_ids: dict[str, int] = {}
+        for ticket in DEMO_TICKETS:
+            now = utc_now_iso()
+            assignee_id = _user_id(conn, ticket.assignee) if ticket.assignee else None
+            ticket_ids[ticket.title] = run(
+                conn,
+                "INSERT INTO tickets (title, description, category, priority, status, asset_tag, "
+                "location, reporter_id, assignee_id, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    ticket.title,
+                    ticket.description,
+                    ticket.category.value,
+                    ticket.priority.value,
+                    ticket.status.value,
+                    ticket.asset_tag,
+                    ticket.location,
+                    _user_id(conn, ticket.reporter),
+                    assignee_id,
+                    now,
+                    now,
+                ),
+            )
+
+        for comment in DEMO_COMMENTS:
+            run(
+                conn,
+                "INSERT INTO comments (ticket_id, author_id, body, created_at) VALUES (?, ?, ?, ?)",
+                (
+                    ticket_ids[comment.ticket_title],
+                    _user_id(conn, comment.author),
+                    comment.body,
+                    utc_now_iso(),
+                ),
+            )
+
+    log_security_event("demo_data_seeded", None, users=len(DEMO_USERS))
+
+
+def _check_schema_version(conn: sqlite3.Connection, database_path: Path) -> None:
+    users_table = fetch_one(
+        conn, "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'"
+    )
+    if users_table is None:
+        return
+
+    version_row = fetch_one(conn, "PRAGMA user_version")
+    version: int = version_row[0] if version_row is not None else 0
+    if version != SCHEMA_VERSION:
+        raise SchemaVersionError(
+            f"Database {database_path} uses schema version {version}, "
+            f"expected {SCHEMA_VERSION}. Delete the file and restart the API to recreate it."
         )
 
-    insert_demo_ticket(
-        conn,
-        title="Laptop nie uruchamia się po aktualizacji",
-        description="Po nocnej aktualizacji systemu laptop zatrzymuje się na logo producenta.",
-        category=TicketCategory.LAPTOP,
-        priority=TicketPriority.HIGH,
-        status=TicketStatus.OPEN,
-        asset_tag="LAP-0042",
-        location="B-204",
-        reporter_username="jan.kowalski",
-        assignee_username=None,
-    )
-    printer_ticket_id = insert_demo_ticket(
-        conn,
-        title="Drukarka zacina papier",
-        description="Drukarka sieciowa na 2. piętrze zacina papier przy druku dwustronnym.",
-        category=TicketCategory.PRINTER,
-        priority=TicketPriority.MEDIUM,
-        status=TicketStatus.IN_PROGRESS,
-        asset_tag="PRN-0007",
-        location="Korytarz, 2. piętro",
-        reporter_username="jan.kowalski",
-        assignee_username="helpdesk",
-    )
-    insert_demo_ticket(
-        conn,
-        title="Migający monitor",
-        description="Monitor zewnętrzny miga co kilka sekund po podłączeniu przez HDMI.",
-        category=TicketCategory.MONITOR,
-        priority=TicketPriority.LOW,
-        status=TicketStatus.OPEN,
-        asset_tag="MON-0113",
-        location="C-012",
-        reporter_username="anna.nowak",
-        assignee_username=None,
-    )
 
-    helpdesk = fetch_one(conn, "SELECT id FROM users WHERE username = ?", ("helpdesk",))
-    if helpdesk is None:
-        raise ValueError("Unknown demo user: helpdesk")
-    execute(
-        conn,
-        "INSERT INTO comments (ticket_id, author_id, body, created_at) VALUES (?, ?, ?, ?)",
-        (
-            printer_ticket_id,
-            helpdesk["id"],
-            "Zamówiono nowy podajnik papieru, wymiana planowana na piątek.",
-            utc_now_iso(),
-        ),
-    )
-
-
-def init_db(database_path: Path, *, with_demo_data: bool) -> None:
+def init_db(database_path: Path, *, demo_password: str | None) -> None:
     database_path.parent.mkdir(parents=True, exist_ok=True)
 
     with closing(connect(database_path)) as conn:
+        _check_schema_version(conn, database_path)
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
-        if with_demo_data:
-            seed_demo_data(conn)
-        conn.commit()
+        if demo_password is not None:
+            seed_demo_data(conn, password=demo_password)

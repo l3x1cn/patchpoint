@@ -1,4 +1,6 @@
-const API_BASE_URL = "http://localhost:8000";
+const API_BASE_URL = "http://patchpoint.localhost:8000";
+const PAGE_SIZE = 50;
+const SESSION_EXPIRED_MESSAGE = "Sesja wygasła lub została zakończona — zaloguj się ponownie.";
 
 const CATEGORY_LABELS = {
   laptop: "Laptop",
@@ -31,6 +33,7 @@ const ROLE_LABELS = {
 
 let currentUser = null;
 let selectedTicketId = null;
+let currentOffset = 0;
 
 const messageBox = document.getElementById("message");
 const authView = document.getElementById("auth-view");
@@ -44,6 +47,37 @@ const registerForm = document.getElementById("register-form");
 const ticketForm = document.getElementById("ticket-form");
 const filterForm = document.getElementById("filter-form");
 const logoutButton = document.getElementById("logout-button");
+const prevButton = document.getElementById("prev-page");
+const nextButton = document.getElementById("next-page");
+const pageInfo = document.getElementById("page-info");
+
+function el(tag, className, ...children) {
+  const element = document.createElement(tag);
+  if (className) {
+    element.className = className;
+  }
+  for (const child of children) {
+    if (child !== null && child !== undefined) {
+      element.append(child);
+    }
+  }
+  return element;
+}
+
+function label(map, value) {
+  return map[value] || value;
+}
+
+function fillSelect(select, labels, selectedValue) {
+  for (const [value, text] of Object.entries(labels)) {
+    const selected = value === selectedValue;
+    select.append(new Option(text, value, selected, selected));
+  }
+}
+
+fillSelect(ticketForm.querySelector('select[name="category"]'), CATEGORY_LABELS);
+fillSelect(ticketForm.querySelector('select[name="priority"]'), PRIORITY_LABELS, "medium");
+fillSelect(filterForm.querySelector('select[name="status"]'), STATUS_LABELS);
 
 async function api(path, options = {}) {
   const response = await fetch(API_BASE_URL + path, {
@@ -61,10 +95,19 @@ async function api(path, options = {}) {
   }
 
   if (!response.ok) {
-    if (body && typeof body.detail === "string") {
-      throw new Error(body.detail);
+    if (response.status === 401 && currentUser !== null) {
+      showAuthView();
+      showMessage(SESSION_EXPIRED_MESSAGE, true);
+      throw new Error(SESSION_EXPIRED_MESSAGE);
     }
-    throw new Error(JSON.stringify(body));
+    const detail = body ? body.detail : null;
+    if (typeof detail === "string") {
+      throw new Error(detail);
+    }
+    if (Array.isArray(detail)) {
+      throw new Error(detail.map((item) => item.msg).join("; "));
+    }
+    throw new Error(`Błąd serwera (HTTP ${response.status})`);
   }
   return body;
 }
@@ -79,58 +122,64 @@ function formatDate(value) {
 }
 
 function statusBadge(status) {
-  return `<span class="status status-${status}">${STATUS_LABELS[status] || status}</span>`;
+  return el("span", "status status-" + status, label(STATUS_LABELS, status));
 }
 
 function showAuthView() {
   currentUser = null;
   selectedTicketId = null;
+  currentOffset = 0;
   authView.hidden = false;
   appView.hidden = true;
   userBar.hidden = true;
   ticketDetail.hidden = true;
-  ticketDetail.innerHTML = "";
-  ticketList.innerHTML = "";
+  ticketDetail.replaceChildren();
+  ticketList.replaceChildren();
+  userInfo.replaceChildren();
+  ticketForm.reset();
+  filterForm.reset();
+  registerForm.reset();
+  showMessage("", false);
 }
 
 async function showAppView() {
   authView.hidden = true;
   appView.hidden = false;
   userBar.hidden = false;
-  userInfo.innerHTML = `Zalogowano: ${currentUser.full_name} (${ROLE_LABELS[currentUser.role] || currentUser.role})`;
+  userInfo.textContent = `Zalogowano: ${currentUser.full_name} (${label(ROLE_LABELS, currentUser.role)})`;
   await loadTickets();
 }
 
 function renderTickets(tickets) {
   if (tickets.length === 0) {
-    ticketList.innerHTML = `<tr><td colspan="8">Brak zgłoszeń.</td></tr>`;
+    const cell = el("td", null, "Brak zgłoszeń.");
+    cell.colSpan = 8;
+    ticketList.replaceChildren(el("tr", null, cell));
     return;
   }
 
-  ticketList.innerHTML = tickets
-    .map(
-      (ticket) => `
-      <tr data-id="${ticket.id}">
-        <td>${ticket.id}</td>
-        <td>${ticket.title}</td>
-        <td>${CATEGORY_LABELS[ticket.category] || ticket.category}</td>
-        <td>${PRIORITY_LABELS[ticket.priority] || ticket.priority}</td>
-        <td>${statusBadge(ticket.status)}</td>
-        <td>${ticket.reporter_name}</td>
-        <td>${ticket.assignee_name || "—"}</td>
-        <td>${formatDate(ticket.created_at)}</td>
-      </tr>`
-    )
-    .join("");
-
-  ticketList.querySelectorAll("tr[data-id]").forEach((row) => {
+  const rows = tickets.map((ticket) => {
+    const row = el(
+      "tr",
+      null,
+      el("td", null, String(ticket.id)),
+      el("td", null, ticket.title),
+      el("td", null, label(CATEGORY_LABELS, ticket.category)),
+      el("td", null, label(PRIORITY_LABELS, ticket.priority)),
+      el("td", null, statusBadge(ticket.status)),
+      el("td", null, ticket.reporter_name),
+      el("td", null, ticket.assignee_name || "—"),
+      el("td", null, formatDate(ticket.created_at))
+    );
     row.addEventListener("click", () => {
-      openTicket(Number(row.dataset.id)).catch((error) => showMessage(error.message, true));
+      openTicket(ticket.id).catch((error) => showMessage(error.message, true));
     });
+    return row;
   });
+  ticketList.replaceChildren(...rows);
 }
 
-function currentFilterQuery() {
+function currentFilterParams() {
   const data = new FormData(filterForm);
   const params = new URLSearchParams();
   for (const [key, value] of data.entries()) {
@@ -138,85 +187,109 @@ function currentFilterQuery() {
       params.set(key, value);
     }
   }
-  const query = params.toString();
-  return query ? `?${query}` : "";
+  return params;
 }
 
 async function loadTickets() {
-  const tickets = await api(`/api/tickets${currentFilterQuery()}`);
+  const params = currentFilterParams();
+  params.set("limit", String(PAGE_SIZE));
+  params.set("offset", String(currentOffset));
+  const tickets = await api(`/api/tickets?${params.toString()}`);
   renderTickets(tickets);
+  prevButton.disabled = currentOffset === 0;
+  nextButton.disabled = tickets.length < PAGE_SIZE;
+  pageInfo.textContent = "Strona " + (currentOffset / PAGE_SIZE + 1);
 }
 
 function renderAgentActions(ticket) {
   if (currentUser.role !== "agent") {
-    return "";
+    return null;
   }
-  const options = Object.entries(STATUS_LABELS)
-    .map(
-      ([value, label]) =>
-        `<option value="${value}"${value === ticket.status ? " selected" : ""}>${label}</option>`
-    )
-    .join("");
-  return `
-    <div class="agent-actions">
-      <select id="status-select">${options}</select>
-      <button type="button" id="status-button">Zmień status</button>
-      <button type="button" id="assign-button">Przypisz do mnie</button>
-    </div>`;
+  const select = el("select");
+  select.id = "status-select";
+  fillSelect(select, STATUS_LABELS, ticket.status);
+
+  const statusButton = el("button", null, "Zmień status");
+  statusButton.type = "button";
+  statusButton.id = "status-button";
+  statusButton.addEventListener("click", onStatusChange);
+
+  const assignButton = el("button", null, "Przypisz do mnie");
+  assignButton.type = "button";
+  assignButton.id = "assign-button";
+  assignButton.addEventListener("click", onAssignToMe);
+
+  return el("div", "agent-actions", select, statusButton, assignButton);
+}
+
+function renderCommentForm() {
+  const textarea = el("textarea");
+  textarea.name = "body";
+  textarea.rows = 3;
+  textarea.required = true;
+  textarea.maxLength = 2000;
+
+  const submit = el("button", null, "Dodaj komentarz");
+  submit.type = "submit";
+
+  const form = el("form", null, el("label", null, "Nowy komentarz", textarea), submit);
+  form.id = "comment-form";
+  form.addEventListener("submit", onCommentSubmit);
+  return form;
 }
 
 async function openTicket(id) {
   const ticket = await api(`/api/tickets/${id}`);
   selectedTicketId = ticket.id;
 
-  const comments = ticket.comments
-    .map(
-      (comment) => `
-      <li>
-        <strong>${comment.author_name}</strong>
-        <span class="meta">${formatDate(comment.created_at)}</span>
-        <div>${comment.body}</div>
-      </li>`
+  const comments = ticket.comments.map((comment) =>
+    el(
+      "li",
+      null,
+      el("strong", null, comment.author_name),
+      " ",
+      el("span", "meta", formatDate(comment.created_at)),
+      el("div", null, comment.body)
     )
-    .join("");
+  );
+  if (comments.length === 0) {
+    comments.push(el("li", null, "Brak komentarzy."));
+  }
 
-  ticketDetail.innerHTML = `
-    <h2>#${ticket.id} ${ticket.title}</h2>
-    <p class="meta">
-      ${statusBadge(ticket.status)}
-      Kategoria: ${CATEGORY_LABELS[ticket.category] || ticket.category} ·
-      Priorytet: ${PRIORITY_LABELS[ticket.priority] || ticket.priority} ·
-      Nr inwentarzowy: ${ticket.asset_tag || "—"} ·
-      Lokalizacja: ${ticket.location || "—"}
-    </p>
-    <p class="meta">
-      Zgłaszający: ${ticket.reporter_name} ·
-      Przypisany: ${ticket.assignee_name || "—"} ·
-      Utworzono: ${formatDate(ticket.created_at)} ·
-      Zaktualizowano: ${formatDate(ticket.updated_at)}
-    </p>
-    <p class="description">${ticket.description}</p>
-    ${renderAgentActions(ticket)}
-    <h3>Komentarze</h3>
-    <ul class="comments">${comments || "<li>Brak komentarzy.</li>"}</ul>
-    <form id="comment-form">
-      <label>Nowy komentarz
-        <textarea name="body" rows="3" required></textarea>
-      </label>
-      <button type="submit">Dodaj komentarz</button>
-    </form>`;
+  const detailNodes = [
+    el("h2", null, `#${ticket.id} ${ticket.title}`),
+    el(
+      "p",
+      "meta",
+      statusBadge(ticket.status),
+      ` Kategoria: ${label(CATEGORY_LABELS, ticket.category)} · ` +
+        `Priorytet: ${label(PRIORITY_LABELS, ticket.priority)} · ` +
+        `Nr inwentarzowy: ${ticket.asset_tag || "—"} · ` +
+        `Lokalizacja: ${ticket.location || "—"}`
+    ),
+    el(
+      "p",
+      "meta",
+      `Zgłaszający: ${ticket.reporter_name} · ` +
+        `Przypisany: ${ticket.assignee_name || "—"} · ` +
+        `Utworzono: ${formatDate(ticket.created_at)} · ` +
+        `Zaktualizowano: ${formatDate(ticket.updated_at)}`
+    ),
+    el("p", "description", ticket.description),
+    renderAgentActions(ticket),
+    el("h3", null, "Komentarze"),
+    ticket.comment_count > ticket.comments.length
+      ? el(
+          "p",
+          "meta",
+          `Wyświetlono ostatnie ${ticket.comments.length} z ${ticket.comment_count} komentarzy.`
+        )
+      : null,
+    el("ul", "comments", ...comments),
+    renderCommentForm()
+  ];
+  ticketDetail.replaceChildren(...detailNodes.filter((node) => node !== null));
   ticketDetail.hidden = false;
-
-  document.getElementById("comment-form").addEventListener("submit", onCommentSubmit);
-
-  const statusButton = document.getElementById("status-button");
-  if (statusButton) {
-    statusButton.addEventListener("click", onStatusChange);
-  }
-  const assignButton = document.getElementById("assign-button");
-  if (assignButton) {
-    assignButton.addEventListener("click", onAssignToMe);
-  }
 }
 
 async function refreshAfterChange() {
@@ -263,6 +336,18 @@ async function onAssignToMe() {
   }
 }
 
+async function changePage(delta) {
+  currentOffset = Math.max(0, currentOffset + delta);
+  try {
+    await loadTickets();
+  } catch (error) {
+    showMessage(error.message, true);
+  }
+}
+
+prevButton.addEventListener("click", () => changePage(-PAGE_SIZE));
+nextButton.addEventListener("click", () => changePage(PAGE_SIZE));
+
 loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const data = new FormData(loginForm);
@@ -272,6 +357,7 @@ loginForm.addEventListener("submit", async (event) => {
       body: { username: data.get("username"), password: data.get("password") },
     });
     currentUser = result.user;
+    currentOffset = 0;
     loginForm.reset();
     showMessage("", false);
     await showAppView();
@@ -304,9 +390,13 @@ logoutButton.addEventListener("click", async () => {
   try {
     await api("/api/auth/logout", { method: "POST" });
   } catch (error) {
-    showMessage(error.message, true);
+    if (currentUser !== null) {
+      showMessage("Nie udało się wylogować: " + error.message, true);
+    }
+    return;
   }
   showAuthView();
+  showMessage("Wylogowano", false);
 });
 
 ticketForm.addEventListener("submit", async (event) => {
@@ -326,6 +416,7 @@ ticketForm.addEventListener("submit", async (event) => {
     });
     ticketForm.reset();
     showMessage("Zgłoszenie wysłane", false);
+    currentOffset = 0;
     await loadTickets();
   } catch (error) {
     showMessage(error.message, true);
@@ -334,6 +425,7 @@ ticketForm.addEventListener("submit", async (event) => {
 
 filterForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  currentOffset = 0;
   try {
     await loadTickets();
   } catch (error) {
