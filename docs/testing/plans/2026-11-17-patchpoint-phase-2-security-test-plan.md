@@ -28,7 +28,7 @@ Changed files by class:
 - neither — `.av/config.toml`, `.gitignore`, `Makefile`, `README.md`, `backend/pyproject.toml` and `backend/uv.lock` (the `argon2-cffi` dependency, whose effect BE-10 checks, and Ruff `S` rules), `backend/tests/**` (pytest suite), `docs/faza-2-sec/**` (audit, threat model, report, evidence), `scripts/demo.sh` and `scripts/security_check.sh` (repository tooling whose API probes the BE scenarios mirror). No DESKTOP code changed.
 
 Intended contract (delivery plan Tasks 2–5 and Verification, docs/plans/2026-11-16-faza-2-sec.md:297-771 and :1202-1246):
-- Platform: `GET /api/health` → `200` `{"status": "ok"}` and nothing else. `/docs`, `/redoc` and `/openapi.json` → `404` unless `PATCHPOINT_DOCS_ENABLED`. Every response that passes through `SecurityHeadersMiddleware` — routed, `404` and `413` responses alike — carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` and `Referrer-Policy: no-referrer`, and on `/api/` paths also `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'` and `Cache-Control: no-store`; CORS preflight answers, which `CORSMiddleware` sends without calling the inner app (backend/.venv/lib/python3.14/site-packages/starlette/middleware/cors.py:86-89), and the `500` that `ServerErrorMiddleware` sends, outside the user middleware, for an exception without its own handler (backend/.venv/lib/python3.14/site-packages/fastapi/applications.py:1039-1050) carry none of them. Request bodies above 65,536 bytes → `413`, still with CORS headers. CORS admits only `http://localhost:5500`, with credentials, methods GET/POST/PATCH and the `Content-Type` header; a foreign-origin preflight → `400`. Database and unhandled errors → `500` `{"detail": "Internal server error", "error_id": <32 hex>}`, details only in the `patchpoint.errors` log.
+- Platform: `GET /api/health` → `200` `{"status": "ok"}` and nothing else. `/docs`, `/redoc` and `/openapi.json` → `404` unless `PATCHPOINT_DOCS_ENABLED`. Every response that passes through `SecurityHeadersMiddleware` — routed, `404` and `413` responses alike — carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` and `Referrer-Policy: no-referrer`, and on `/api/` paths also `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'` and `Cache-Control: no-store`; CORS preflight answers, which `CORSMiddleware` sends without calling the inner app (backend/.venv/lib/python3.14/site-packages/starlette/middleware/cors.py:86-89), and the `500` that `ServerErrorMiddleware` sends, outside the user middleware, for an exception without its own handler (backend/.venv/lib/python3.14/site-packages/fastapi/applications.py:1039-1050) carry none of them. Request bodies above 65,536 bytes → `413`, still with CORS headers. CORS admits only `http://patchpoint.localhost:5500`, with credentials, methods GET/POST/PATCH and the `Content-Type` header; a foreign-origin preflight → `400`. Database and unhandled errors → `500` `{"detail": "Internal server error", "error_id": <32 hex>}`, details only in the `patchpoint.errors` log.
 - Accounts and sessions: sign-up → `201` employee; unknown fields such as `role` → `422`; passwords of 15–128 characters that do not contain the username; usernames `[A-Za-z0-9._@+-]{3,50}`; a taken username → `409` `Username is already taken`; Argon2id hashes. Login → `200` `{"user": …}` plus the `session` cookie (`HttpOnly; Secure; SameSite=Strict; Max-Age=28800; Path=/`), its token from `secrets.token_urlsafe(32)` stored as SHA-256; unknown username and wrong password → the identical `401` `Invalid username or password`; five failures in 15 minutes per username → `429` `Too many failed login attempts. Try again later.` with `Retry-After: 900`; a success clears the count. Authentication by cookie only (no Bearer); sessions end after 30 idle minutes or 8 hours. Logout deletes the server session and the cookie and always answers `200`. No response contains `password_hash`. Demo accounts exist only on request, with `PATCHPOINT_DEMO_PASSWORD` and without `admin`.
 - Tickets: one static parameterised list query; `search` matched literally (`LIKE … ESCAPE '\'`, at most 100 characters); `limit` 1–100 (default 50); `offset` 0…2⁶³−1; newest first. A single ownership check answers `404` `Ticket not found` for foreign and missing tickets alike. Ids outside 1…2⁶³−1 → `422`. Title ≤ 200, description ≤ 5000, asset tag ≤ 50, location ≤ 100, comment ≤ 2000 characters; unknown fields → `422`. The agent-only PATCH writes one static `COALESCE` update.
 - Client: API data reaches the DOM only as text; CSP and `no-referrer` meta tags; select lists filled from the label maps; HTML length limits matching the API; pages of 50 rows with "Poprzednia"/"Następna"; a 401 during work returns to the sign-in view with `Sesja wygasła lub została zakończona — zaloguj się ponownie.`; logout resets forms and messages; error text is the string `detail` or the joined `msg` values.
@@ -63,7 +63,7 @@ Anonymous requests send no credential: BE-01–BE-09, the no-cookie edge cases a
 
 ## FE Test Scenarios
 
-Every FE scenario runs in the browser on the `ui` target, whose page calls the API at `http://localhost:8000` (frontend/app.js:1). Ticket titles carry `$QA_TAG`, so list assertions are unaffected by other data.
+Every FE scenario runs in the browser on the `ui` target, whose page calls the API at `http://patchpoint.localhost:8000` (frontend/app.js:1). Ticket titles carry `$QA_TAG`, so list assertions are unaffected by other data.
 
 ### State combinations — client response handling (FE-01, FE-02, FE-03, FE-05, FE-06, FE-09)
 
@@ -117,7 +117,7 @@ For rows 6–8 the message depends on the shape of `detail` (frontend/app.js:103
 - **Expected:** After step 2 `#user-info` reads "Zalogowano: QA Owner $QA_TAG (pracownik)", both "Logowanie" fields are empty, and the expression returns `false` because the `session` cookie is `HttpOnly` (backend/app/routers/auth.py:132-140) (frontend/app.js:352-356); after step 4 `#message` shows "Wylogowano" in the success style, the sign-in view is visible, the app view and the user bar are hidden, and the Tytuł and Szukaj inputs are empty (frontend/app.js:128-143) (frontend/app.js:391-392)
 - **Edge cases:**
   - Right after step 4, `#ticket-list` has no rows and `#ticket-detail` is empty and hidden, so no data of the signed-out user stays in the page (frontend/app.js:135-138)
-  - Still signed out, run `fetch('http://localhost:8000/api/auth/me', {credentials: 'include'})` in the page: its status is `401`; reloading then shows the sign-in view — the server ended the session and the cookie was deleted (backend/app/routers/auth.py:150-158)
+  - Still signed out, run `fetch('http://patchpoint.localhost:8000/api/auth/me', {credentials: 'include'})` in the page: its status is `401`; reloading then shows the sign-in view — the server ended the session and the cookie was deleted (backend/app/routers/auth.py:150-158)
   - Sign in again with Login `qa+$QA_TAG-owner@test.local` and Hasło `$QA_NEW_PASSWORD`, then reload the page: the app view and "Zalogowano: QA Owner $QA_TAG (pracownik)" return without signing in again, because the start-up `GET /api/auth/me` still authenticates with the HttpOnly cookie (frontend/app.js:429-441)
 
 ### FE-03: A session ended outside the page sends the next action back to sign-in
@@ -126,7 +126,7 @@ For rows 6–8 the message depends on the shape of `detail` (frontend/app.js:103
 - **Writes:** yes
 - **Preconditions:** Open `/`; if the user bar is visible, click "Wyloguj". Unless this dispatch already registered owner, register it through "Rejestracja" (Login `qa+$QA_TAG-owner@test.local`, Imię i nazwisko `QA Owner $QA_TAG`, Dział `QA`, Hasło `$QA_NEW_PASSWORD`) and record the account. Sign in through "Logowanie" with Login `qa+$QA_TAG-owner@test.local` and Hasło `$QA_NEW_PASSWORD`, and wait for `Zalogowano:`.
 - **Steps:**
-  1. In the page run `(await fetch('http://localhost:8000/api/auth/logout', {method: 'POST', credentials: 'include'})).status` and note it (`200`): the server ends the session while the page still shows the app view
+  1. In the page run `(await fetch('http://patchpoint.localhost:8000/api/auth/logout', {method: 'POST', credentials: 'include'})).status` and note it (`200`): the server ends the session while the page still shows the app view
   2. Click "Filtruj"
 - **Expected:** The sign-in view is shown, the app view and the user bar are hidden, and `#message` shows "Sesja wygasła lub została zakończona — zaloguj się ponownie." in the error style (frontend/app.js:98-101) (frontend/app.js:3)
 - **Edge cases:**
@@ -198,8 +198,8 @@ For rows 6–8 the message depends on the shape of `detail` (frontend/app.js:103
 - **Steps:**
   1. Read the `content` of `meta[http-equiv="Content-Security-Policy"]` and of `meta[name="referrer"]`
   2. In the page run `window.__qaCsp = []; document.addEventListener('securitypolicyviolation', (e) => window.__qaCsp.push(e.effectiveDirective));`
-  3. In the page run `(await fetch('http://localhost:8000/api/health')).status`, then read the number of options in "Nowe zgłoszenie" Kategoria and `getComputedStyle(document.querySelector('.pagination')).display`
-- **Expected:** The CSP content is exactly `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src http://localhost:8000; base-uri 'none'; form-action 'none'` and the referrer content is `no-referrer` (frontend/index.html:7-8); the fetch returns `200` and `window.__qaCsp` stays empty; Kategoria has 7 options, so `app.js` ran under `script-src 'self'` (frontend/app.js:78-80); `.pagination` computes `display` `flex`, so `styles.css` loaded under `style-src 'self'` (frontend/styles.css:140-145)
+  3. In the page run `(await fetch('http://patchpoint.localhost:8000/api/health')).status`, then read the number of options in "Nowe zgłoszenie" Kategoria and `getComputedStyle(document.querySelector('.pagination')).display`
+- **Expected:** The CSP content is exactly `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src http://patchpoint.localhost:8000; base-uri 'none'; form-action 'none'` and the referrer content is `no-referrer` (frontend/index.html:7-8); the fetch returns `200` and `window.__qaCsp` stays empty; Kategoria has 7 options, so `app.js` ran under `script-src 'self'` (frontend/app.js:78-80); `.pagination` computes `display` `flex`, so `styles.css` loaded under `style-src 'self'` (frontend/styles.css:140-145)
 - **Edge cases:**
   - Run `fetch('/')` (the UI's own origin, absent from `connect-src`): it rejects with a `TypeError` and `window.__qaCsp` gains `connect-src` (frontend/index.html:7)
   - Run `const s = document.createElement('script'); s.textContent = 'window.__qaInline = 1'; document.head.append(s);`: `window.__qaInline` stays undefined and `window.__qaCsp` gains an entry starting with `script-src` (frontend/index.html:7)
@@ -265,7 +265,7 @@ Sessions travel only in the `session` cookie: retain it from each login's `Set-C
 
 ### State combinations — CORS (BE-03…BE-08)
 
-`CORSMiddleware` (backend/app/main.py:71-78) answers from three inputs: whether `Origin` is on the allow-list, which holds only `http://localhost:5500` (backend/app/config.py:18); whether the request is a preflight, i.e. `OPTIONS` with `Origin` and `Access-Control-Request-Method` (backend/.venv/lib/python3.14/site-packages/starlette/middleware/cors.py:86-89); and whether the requested method and headers are allowed — GET/POST/PATCH, `Content-Type` and the safelisted headers (backend/.venv/lib/python3.14/site-packages/starlette/middleware/cors.py:119-130).
+`CORSMiddleware` (backend/app/main.py:71-78) answers from three inputs: whether `Origin` is on the allow-list, which holds only `http://patchpoint.localhost:5500` (backend/app/config.py:18); whether the request is a preflight, i.e. `OPTIONS` with `Origin` and `Access-Control-Request-Method` (backend/.venv/lib/python3.14/site-packages/starlette/middleware/cors.py:86-89); and whether the requested method and headers are allowed — GET/POST/PATCH, `Content-Type` and the safelisted headers (backend/.venv/lib/python3.14/site-packages/starlette/middleware/cors.py:119-130).
 
 | # | Origin allowed | Preflight | Requested method and headers allowed | Classification | Outcome | Scenario |
 |---|---|---|---|---|---|---|
@@ -284,12 +284,12 @@ Sessions travel only in the `session` cookie: retain it from each login's `Set-C
 - **Writes:** no
 - **Preconditions:** none; anonymous `OPTIONS` requests, which change no state
 - **Method:** OPTIONS /api/tickets
-- **Headers:** `Origin: http://localhost:5500`, `Access-Control-Request-Method: GET`, `Access-Control-Request-Headers: content-type`
+- **Headers:** `Origin: http://patchpoint.localhost:5500`, `Access-Control-Request-Method: GET`, `Access-Control-Request-Headers: content-type`
 - **Payload:** none
-- **Expected:** `200`; `access-control-allow-origin: http://localhost:5500`, `access-control-allow-credentials: true`, `access-control-allow-methods: GET, POST, PATCH`, `access-control-allow-headers: Accept, Accept-Language, Content-Language, Content-Type` (no `Authorization`) and `access-control-max-age: 600`; the plain-text body is withheld by qa-redact and not asserted (backend/app/main.py:71-78) (backend/.venv/lib/python3.14/site-packages/starlette/middleware/cors.py:47-62)
+- **Expected:** `200`; `access-control-allow-origin: http://patchpoint.localhost:5500`, `access-control-allow-credentials: true`, `access-control-allow-methods: GET, POST, PATCH`, `access-control-allow-headers: Accept, Accept-Language, Content-Language, Content-Type` (no `Authorization`) and `access-control-max-age: 600`; the plain-text body is withheld by qa-redact and not asserted (backend/app/main.py:71-78) (backend/.venv/lib/python3.14/site-packages/starlette/middleware/cors.py:47-62)
 - **Edge cases:**
   - The same headers with `Access-Control-Request-Method: PATCH` (the agent's status and assignment calls): `200` with the same `access-control-allow-origin` (backend/.venv/lib/python3.14/site-packages/starlette/middleware/cors.py:119-120)
-  - `OPTIONS /api/auth/login` with `Origin: http://localhost:5500`, `Access-Control-Request-Method: POST` and `Access-Control-Request-Headers: content-type`: `200` with `access-control-allow-origin: http://localhost:5500` (backend/app/main.py:75-76)
+  - `OPTIONS /api/auth/login` with `Origin: http://patchpoint.localhost:5500`, `Access-Control-Request-Method: POST` and `Access-Control-Request-Headers: content-type`: `200` with `access-control-allow-origin: http://patchpoint.localhost:5500` (backend/app/main.py:75-76)
 
 ### BE-04: Preflight from the UI origin asking for a forbidden header or method is refused
 - **Area:** CORS preflight — matrix row 2
@@ -297,7 +297,7 @@ Sessions travel only in the `session` cookie: retain it from each login's `Set-C
 - **Writes:** no
 - **Preconditions:** none; anonymous `OPTIONS` requests, which change no state
 - **Method:** OPTIONS /api/auth/me
-- **Headers:** `Origin: http://localhost:5500`, `Access-Control-Request-Method: GET`, `Access-Control-Request-Headers: authorization`
+- **Headers:** `Origin: http://patchpoint.localhost:5500`, `Access-Control-Request-Method: GET`, `Access-Control-Request-Headers: authorization`
 - **Payload:** none
 - **Expected:** `400` — a cross-origin page cannot send an `Authorization` header (backend/app/main.py:76) (backend/.venv/lib/python3.14/site-packages/starlette/middleware/cors.py:126-130)
 - **Edge cases:**
@@ -314,7 +314,7 @@ Sessions travel only in the `session` cookie: retain it from each login's `Set-C
 - **Payload:** none
 - **Expected:** `400` and no `access-control-allow-origin` header (backend/app/config.py:18) (backend/.venv/lib/python3.14/site-packages/starlette/middleware/cors.py:111-117)
 - **Edge cases:**
-  - `Origin: http://localhost:8000` (the API's own origin, not on the allow-list): `400` and no `access-control-allow-origin` (backend/app/config.py:18)
+  - `Origin: http://patchpoint.localhost:8000` (the API's own origin, not on the allow-list): `400` and no `access-control-allow-origin` (backend/app/config.py:18)
   - `Origin` built from the scheme `http`, `://`, the host `127.0.0.1` and the port `5500` (the UI reached by IP): `400` and no `access-control-allow-origin` — the allow-list compares exact strings (backend/.venv/lib/python3.14/site-packages/starlette/middleware/cors.py:93-100)
   - `Origin: null` (an opaque origin): `400` and no `access-control-allow-origin` (backend/.venv/lib/python3.14/site-packages/starlette/middleware/cors.py:93-100)
 
@@ -329,7 +329,7 @@ Sessions travel only in the `session` cookie: retain it from each login's `Set-C
 - **Expected:** `400` and no `access-control-allow-origin` header (backend/.venv/lib/python3.14/site-packages/starlette/middleware/cors.py:111-143)
 - **Edge cases:**
   - The same `Origin` with `Access-Control-Request-Method: DELETE` and no requested headers: `400` and no `access-control-allow-origin` (backend/.venv/lib/python3.14/site-packages/starlette/middleware/cors.py:116-120)
-  - `Origin: http://localhost:8000` with `Access-Control-Request-Method: GET` and `Access-Control-Request-Headers: authorization`: `400` and no `access-control-allow-origin` (backend/.venv/lib/python3.14/site-packages/starlette/middleware/cors.py:111-130)
+  - `Origin: http://patchpoint.localhost:8000` with `Access-Control-Request-Method: GET` and `Access-Control-Request-Headers: authorization`: `400` and no `access-control-allow-origin` (backend/.venv/lib/python3.14/site-packages/starlette/middleware/cors.py:111-130)
 
 ### BE-07: Simple requests from the UI origin carry the allow-origin and credentials headers
 - **Area:** CORS on simple responses — matrix row 5
@@ -337,12 +337,12 @@ Sessions travel only in the `session` cookie: retain it from each login's `Set-C
 - **Writes:** no
 - **Preconditions:** none; anonymous GET requests
 - **Method:** GET /api/health
-- **Headers:** `Origin: http://localhost:5500`
+- **Headers:** `Origin: http://patchpoint.localhost:5500`
 - **Payload:** none
-- **Expected:** `200` `{"status": "ok"}` with `access-control-allow-origin: http://localhost:5500`, `access-control-allow-credentials: true` and `Origin` in `vary` (backend/.venv/lib/python3.14/site-packages/starlette/middleware/cors.py:158-168)
+- **Expected:** `200` `{"status": "ok"}` with `access-control-allow-origin: http://patchpoint.localhost:5500`, `access-control-allow-credentials: true` and `Origin` in `vary` (backend/.venv/lib/python3.14/site-packages/starlette/middleware/cors.py:158-168)
 - **Edge cases:**
-  - `GET /api/auth/me` with the same `Origin` and no cookie: `401` `{"detail": "Not authenticated"}` still carrying `access-control-allow-origin: http://localhost:5500` and `access-control-allow-credentials: true`, so the client can read it at start-up (frontend/app.js:429-434) (backend/.venv/lib/python3.14/site-packages/starlette/middleware/cors.py:158-168)
-  - `GET /` with the same `Origin`: `404` with `access-control-allow-origin: http://localhost:5500` — CORS is the outermost middleware for every path (backend/app/main.py:68-78)
+  - `GET /api/auth/me` with the same `Origin` and no cookie: `401` `{"detail": "Not authenticated"}` still carrying `access-control-allow-origin: http://patchpoint.localhost:5500` and `access-control-allow-credentials: true`, so the client can read it at start-up (frontend/app.js:429-434) (backend/.venv/lib/python3.14/site-packages/starlette/middleware/cors.py:158-168)
+  - `GET /` with the same `Origin`: `404` with `access-control-allow-origin: http://patchpoint.localhost:5500` — CORS is the outermost middleware for every path (backend/app/main.py:68-78)
 
 ### BE-08: Simple requests from a foreign origin get no allow-origin header
 - **Area:** CORS on simple responses — matrix row 7
@@ -354,7 +354,7 @@ Sessions travel only in the `session` cookie: retain it from each login's `Set-C
 - **Payload:** none
 - **Expected:** `200` `{"status": "ok"}` without an `access-control-allow-origin` header, so a browser keeps the response from the foreign page (backend/.venv/lib/python3.14/site-packages/starlette/middleware/cors.py:158-170)
 - **Edge cases:**
-  - `Origin: http://localhost:8000`: `200` without `access-control-allow-origin` (backend/app/config.py:18)
+  - `Origin: http://patchpoint.localhost:8000`: `200` without `access-control-allow-origin` (backend/app/config.py:18)
   - `GET /api/auth/me` with the foreign `Origin` and no cookie: `401` without `access-control-allow-origin` (backend/.venv/lib/python3.14/site-packages/starlette/middleware/cors.py:158-170)
 
 ### BE-09: Request bodies above 64 KiB are refused before authentication
@@ -363,9 +363,9 @@ Sessions travel only in the `session` cookie: retain it from each login's `Set-C
 - **Writes:** yes
 - **Preconditions:** none; anonymous requests. Each body is the letter `x` repeated to the stated size, sent with `Content-Type: application/json` and its `Content-Length`; none of them can create an account or a ticket.
 - **Method:** POST /api/auth/register
-- **Headers:** `Content-Type: application/json`, `Origin: http://localhost:5500`
+- **Headers:** `Content-Type: application/json`, `Origin: http://patchpoint.localhost:5500`
 - **Payload:** 70,000 bytes of `x`
-- **Expected:** `413` with `access-control-allow-origin: http://localhost:5500` and `x-content-type-options: nosniff` — CORS and the security headers wrap the refusal; the plain-text body is withheld by qa-redact and not asserted (backend/app/main.py:68-78) (backend/.venv/lib/python3.14/site-packages/starlette/middleware/body_limit.py:115-121)
+- **Expected:** `413` with `access-control-allow-origin: http://patchpoint.localhost:5500` and `x-content-type-options: nosniff` — CORS and the security headers wrap the refusal; the plain-text body is withheld by qa-redact and not asserted (backend/app/main.py:68-78) (backend/.venv/lib/python3.14/site-packages/starlette/middleware/body_limit.py:115-121)
 - **Edge cases:**
   - 65,537 bytes of `x`: `413` (backend/app/config.py:19) (backend/.venv/lib/python3.14/site-packages/starlette/middleware/body_limit.py:104-106)
   - Exactly 65,536 bytes of `x`: `422` with `detail[0].type` `json_invalid` — a body at the limit is read and parsed (backend/.venv/lib/python3.14/site-packages/starlette/middleware/body_limit.py:108-112) (backend/.venv/lib/python3.14/site-packages/fastapi/routing.py:476-491)
@@ -795,4 +795,4 @@ Sessions travel only in the `session` cookie: retain it from each login's `Set-C
 - Rejection of a stored legacy MD5 hash (backend/app/security.py:21-25) — it needs a Phase 1 hash written into `users`, and State Checks are read-only.
 - Equal response time for unknown usernames (backend/app/security.py:28-29) — timing is not a deterministic HTTP assertion; the identical status and body are checked by BE-13 and BE-14.
 - The client's `Nie udało się wylogować: …` message (frontend/app.js:385-388) and its `Błąd serwera (HTTP <status>)` fallback (frontend/app.js:110) — both need the API to fail or be unreachable during a session, which the browser harness cannot induce.
-- `make security-check` (22 `[NAPRAWIONE]`), `make demo`, `make lint`, `make typecheck` and `make test` with coverage ≥ 80% — repository scripts and build tooling, not browser, HTTP or database actions; the BE scenarios mirror the security script's API probes.
+- `DB_PATH=<the API's database> API_LOG=<the API's stderr log> make security-check` (22 `[NAPRAWIONE]`; without the two variables W-18 and SEC-020 are `[POMINIĘTE]`), `make demo`, `make lint`, `make typecheck` and `make test` with coverage ≥ 80% — repository scripts and build tooling, not browser, HTTP or database actions; the BE scenarios mirror the security script's API probes.
