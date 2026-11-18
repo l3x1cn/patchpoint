@@ -22,6 +22,8 @@ Scans that ran: ruff (with `S`), mypy strict, `node --check`, semgrep (8 rule se
 ## Security
 
 ### [MEDIUM] SEC-001: Session cookie is sent to every port on localhost
+**Status:** ✅ Fixed (2026-11-17)
+
 
 **ID:** SEC-001
 **Location:** `backend/app/routers/auth.py:132`
@@ -49,6 +51,8 @@ PATCHPOINT_CORS_ORIGINS='["http://patchpoint.localhost:5500"]' make run   # open
 ---
 
 ### [MEDIUM] SEC-002: Ticket detail returns every comment, with no limit or paging
+**Status:** ✅ Fixed (2026-11-17)
+
 
 **ID:** SEC-002
 **Location:** `backend/app/routers/tickets.py:162`
@@ -79,6 +83,8 @@ async def list_comments(ticket_id: TicketId, user: CurrentUser, conn: DbConnecti
 ---
 
 ### [LOW] SEC-003: client_ip in security events can be forged with X-Forwarded-For
+**Status:** ✅ Fixed (2026-11-17)
+
 
 **ID:** SEC-003
 **Location:** `backend/app/audit.py:31`
@@ -104,6 +110,8 @@ run:
 ---
 
 ### [LOW] SEC-004: DEMO_PASSWORD is visible to other local users through the process list
+**Status:** ✅ Fixed (2026-11-17)
+
 
 **ID:** SEC-004
 **Location:** `scripts/demo.sh:53`
@@ -131,6 +139,8 @@ status=$(curl "${args[@]}" "$API_URL$path" <<<"$payload") || status="000"
 ---
 
 ### [LOW] SEC-005: Rejected tampering attempts leave no security event
+**Status:** ✅ Fixed (2026-11-17)
+
 
 **ID:** SEC-005
 **Location:** `backend/app/main.py:80`
@@ -167,6 +177,8 @@ app.add_exception_handler(RequestValidationError, validation_error_handler)
 ## Performance
 
 ### [LOW] PERF-001: Registration hashes passwords with Argon2 on the event loop
+**Status:** ✅ Fixed (2026-11-17)
+
 
 **ID:** PERF-001
 **Location:** `backend/app/routers/auth.py:45-55`
@@ -195,6 +207,8 @@ async def register(payload: UserCreate, request: Request, conn: DbConnection) ->
 ## Maintainability
 
 ### [LOW] MAINT-001: Security-event log helper is copied into three test modules
+**Status:** ✅ Fixed (2026-11-17)
+
 
 **ID:** MAINT-001
 **Location:** `backend/tests/test_auth.py:37-42`
@@ -220,13 +234,19 @@ def log_events(caplog: pytest.LogCaptureFixture, logger: str = "patchpoint.secur
 ## Documentation
 
 ### [MEDIUM] DOC-001: The Phase 2 report says security headers are on all responses, but two kinds of response skip them
+**Status:** ✅ Fixed (2026-11-18)
 
 **ID:** DOC-001
-**Location:** `docs/faza-2-sec/README.md:118`
+**Location:** `docs/faza-2-sec/README.md:119` (was: `docs/faza-2-sec/README.md:118`)
 **Category:** Documentation
 **Drift-class:** decision
 **Fix-policy:** needs-decision
 **Effort:** easy
+**Decision:** A — In backend/app/main.py:87-97 register the middleware in the order RequestBodyLimitMiddleware, then CORSMiddleware (same arguments as now: allow_origins=settings.cors_origins, allow_credentials=True, allow_methods=["GET", "POST", "PATCH"], allow_headers=["Content-Type"], max_age=600), then SecurityHeadersMiddleware, so that SecurityHeadersMiddleware is added last and becomes the outermost user middleware, and reword the comment at backend/app/main.py:87 to "The last middleware added is the outermost: security headers also wrap CORS preflight answers, and CORS still wraps 413 responses."; in backend/app/middleware.py add `def security_headers_for(path: str) -> dict[str, str]` returning COMMON_SECURITY_HEADERS plus API_SECURITY_HEADERS when path starts with "/api/", use it in SecurityHeadersMiddleware.__call__ (backend/app/middleware.py:23-40) with the existing `setdefault` behaviour, and pass `headers=security_headers_for(request.url.path)` to the JSONResponse returned by internal_error_handler (backend/app/main.py:38-41), because the `Exception` handler runs inside ServerErrorMiddleware outside all user middleware; add to backend/tests/test_platform.py `test_cors_preflight_carries_security_headers` (the `client` fixture sends OPTIONS /api/auth/me with Origin http://patchpoint.localhost:5500 and Access-Control-Request-Method GET, expects 200 and every COMMON_SECURITY_HEADERS and API_SECURITY_HEADERS value) and `test_unhandled_exception_response_carries_security_headers` (registers GET /api/test-failure raising RuntimeError on the `app` fixture, calls it through TestClient(app, raise_server_exceptions=False), expects 500 and the same header values); in docs/faza-2-sec/README.md:119 insert before the period that follows "(`backend/app/middleware.py`)" the clause ", a odpowiedź 500 wysyłaną przez `ServerErrorMiddleware` poza middleware uzupełnia o te same nagłówki `internal_error_handler` (`backend/app/main.py`)", and append the two new test names to the tests column of the SEC-021 row at docs/faza-2-sec/README.md:59. [user, 2026-11-18]
+**Verification-plan:** `Grep pattern=add_middleware path=backend/app/main.py` → the last matched line is `app.add_middleware(SecurityHeadersMiddleware)` and the first is `app.add_middleware(RequestBodyLimitMiddleware, max_body_size=settings.max_body_bytes)`; `Grep pattern=security_headers_for path=backend/app` → matches the definition and a call in backend/app/middleware.py and a call in backend/app/main.py; `cd backend && uv run pytest tests/test_platform.py -v --no-cov` → output lists `test_cors_preflight_carries_security_headers PASSED` and `test_unhandled_exception_response_carries_security_headers PASSED` and no `failed` count; `make test` → pytest's final summary line reports a `passed` count with no `failed` or `error` count; `make lint` → output contains `All checks passed!` and no `Would reformat`; `make typecheck` → output contains `Success: no issues found`; `Read path=docs/faza-2-sec/README.md:119:raw` → the excerpt says `internal_error_handler` adds the same headers to the 500 sent by `ServerErrorMiddleware` (soft)
+**Decision-pin:** block=811cb655778b5f57fa8db19a1da24c0cf86fbc618ad38b127bc9e0d8df2905a0 | docs/faza-2-sec/README.md=f2115bfbc717d3cb92eaa662e73dbc3ba7726b08:edit | backend/app/main.py=5b495d5c9f18b76dd51300001da7f1cdd3af7068:edit | backend/app/middleware.py=152371a6550ac9bffaefd2282fb4ec590dddc977:edit | backend/tests/test_platform.py=6a13ef1aa859fb3b625c09bd89f8afe8dac8141d:edit
+**Dispatch:** attempt 1 dispatched 2026-11-18
+**Verification:** advisory — grep of middleware order, security_headers_for use, pytest tests/test_platform.py tests/test_cors.py (21 passed), make test (137 passed, coverage 98.30%), make lint, make typecheck ran; the re-read of docs/faza-2-sec/README.md:119 is a soft check
 
 **Problem:**
 The report says `SecurityHeadersMiddleware` adds the common headers to every response ("do wszystkich odpowiedzi") and the API-only headers to every `/api/` response. Two kinds of response are produced outside that middleware (related change: `backend/app/main.py:69-81`):
@@ -244,6 +264,7 @@ Choose one. Fix the code: register `SecurityHeadersMiddleware` after `CORSMiddle
 ---
 
 ### [MEDIUM] DOC-002: The README says the API accepts requests only from listed origins, but CORS does not filter requests
+**Status:** ✅ Fixed (2026-11-18)
 
 **ID:** DOC-002
 **Location:** `README.md:17`
@@ -251,6 +272,11 @@ Choose one. Fix the code: register `SecurityHeadersMiddleware` after `CORSMiddle
 **Drift-class:** decision
 **Fix-policy:** needs-decision
 **Effort:** trivial
+**Decision:** B — Make the API reject browser requests from unlisted origins: in backend/app/middleware.py add a pure-ASGI class `OriginCheckMiddleware(app, allowed_origins: list[str])` modelled on `SecurityHeadersMiddleware` that, for `http` scopes whose `origin` header is present and not in `allowed_origins`, sends a 403 JSON response `{"detail": "Origin not allowed"}` without calling the inner app and passes every request without an `Origin` header through unchanged; in backend/app/main.py import it on line 17 next to `SecurityHeadersMiddleware` and insert `app.add_middleware(OriginCheckMiddleware, allowed_origins=settings.cors_origins)` between the `RequestBodyLimitMiddleware` registration (line 88) and the `SecurityHeadersMiddleware` registration (line 89), so `CORSMiddleware` stays outermost and still answers preflights and the 403 still gets security headers; in backend/tests/test_cors.py:49-53 change `test_simple_request_from_unknown_origin_gets_no_cors_headers` to expect 403 and add tests that `POST /api/auth/logout` with `Origin: http://evil.example` returns 403 and leaves a logged-in session valid (`GET /api/auth/me` still 200), that a request with `Origin: http://patchpoint.localhost:5500` returns 200, and that a request without `Origin` returns 200; in README.md:17 replace the sentence "API przyjmuje żądania tylko z originów z listy `PATCHPOINT_CORS_ORIGINS` (domyślnie `http://patchpoint.localhost:5500`)." with "API odrzuca (403) żądania z nagłówkiem `Origin` spoza listy `PATCHPOINT_CORS_ORIGINS` (domyślnie `http://patchpoint.localhost:5500`), a żądania bez `Origin` (np. z `curl`) przyjmuje." and in README.md:37 extend the `middleware.py` comment to name `OriginCheckMiddleware`; in docs/faza-2-sec/README.md:90 replace the closing sentence "Ryzyko rezydualne: proste żądanie `POST /api/auth/logout` z tego samego site nadal może wylogować użytkownika." with a sentence saying requests with an unlisted `Origin` get 403, add the same mechanism to the CORS bullet at docs/faza-2-sec/README.md:118, and delete the residual-risk bullet at docs/faza-2-sec/README.md:194; in docs/faza-2-sec/threat-model.md:230 add the Origin check to the "Faza 2 przerywa przez" line and in docs/faza-2-sec/threat-model.md:231 delete the logout residual-risk sentence while keeping the sentence that points to CORS-2; leave docs/plans/2026-11-16-faza-2-sec.md unchanged as a frozen plan. [user, 2026-11-18]
+**Verification-plan:** `cd backend && uv run pytest tests/test_cors.py -q --no-cov` → the pytest summary line contains `passed` and contains neither `failed` nor `error`; `make test` → the output contains `Required test coverage of 80% reached` and the pytest summary line contains no `failed`; `make lint` → the output contains `All checks passed!` and `files already formatted`; `make typecheck` → the output contains `Success: no issues found`; `Grep pattern=status_code == 403 path=backend/tests/test_cors.py` → at least two matching lines; `Grep pattern=class OriginCheckMiddleware|add_middleware\(OriginCheckMiddleware path=backend/app` → one match in backend/app/middleware.py and one match in backend/app/main.py; `Grep pattern=przyjmuje żądania tylko|nadal może wylogować path=README.md` → (empty); `Grep pattern=przyjmuje żądania tylko|nadal może wylogować path=docs/faza-2-sec` → (empty); `Read path=README.md:17:raw` → the excerpt says the API rejects with 403 requests whose `Origin` is not on the `PATCHPOINT_CORS_ORIGINS` list and accepts requests without `Origin` (soft)
+**Decision-pin:** block=2e2e965cd8c87ecc3c3deedff448ae94d1e8fd3528f1c70b28ebb0d5d33546c0 | README.md=0ce89897392549ab71f1582c7f8fdbfba4850aba:edit | backend/app/middleware.py=b2a0c4084d3566f377aac10e7cd877f308b9c83e:edit | backend/app/main.py=0929f2a4b202a14a2e105b02e138ef109db407e5:edit | backend/tests/test_cors.py=79146898944a60a79aa704945b2e2151290d3295:edit | docs/faza-2-sec/README.md=d0a847fe1370c1a932cd7d79aacfdbb263253b84:edit | docs/faza-2-sec/threat-model.md=99391deef3b8d0b5af7fba3456652ac030ea64e7:edit | docs/plans/2026-11-16-faza-2-sec.md=8633c2ae66c54d865fbce7440c4d8fd424b1eadd:ref
+**Dispatch:** attempt 1 dispatched 2026-11-18
+**Verification:** advisory — pytest tests/test_cors.py, make test (137 passed), make lint, make typecheck, greps for 403 tests, OriginCheckMiddleware registration and removed sentences ran; the re-read of README.md:17 is a soft check
 
 **Problem:**
 `README.md:17` says "API przyjmuje żądania tylko z originów z listy `PATCHPOINT_CORS_ORIGINS`". CORS only decides which origins a browser lets read responses and when a preflight is required. The API still processes simple requests from any origin: `backend/tests/test_cors.py:47-51` asserts HTTP 200 for a `GET /api/health` from a foreign origin, and the report lists same-site `POST /api/auth/logout` as a residual risk (`docs/faza-2-sec/README.md:89`, `:190`). Related change: `backend/app/main.py:71-78`, `backend/app/config.py:18`.
@@ -264,6 +290,7 @@ Reword: "Przeglądarka udostępnia odpowiedzi API (z poświadczeniami) tylko ori
 ---
 
 ### [MEDIUM] DOC-003: The README still sends readers to the Phase 1 report for the API description
+**Status:** ✅ Fixed (2026-11-18)
 
 **ID:** DOC-003
 **Location:** `README.md:17`
@@ -271,6 +298,11 @@ Reword: "Przeglądarka udostępnia odpowiedzi API (z poświadczeniami) tylko ori
 **Drift-class:** decision
 **Fix-policy:** needs-decision
 **Effort:** trivial
+**Decision:** B — In docs/faza-2-sec/README.md §7 (heading `## 7. Zmiany kontraktu API względem Fazy 1` at line 141), after the change table's last row (line 157, «| Dane demo | … |») and before line 159 («Kontrakt wygenerowany przez FastAPI: [`dowody/openapi.json`](dowody/openapi.json).»), insert a blank line, the line «Bieżące endpointy (każdy może też dać 413 dla ciała powyżej 64 KiB i 500 `{"detail": "Internal server error", "error_id": "<uuid>"}`):», a blank line, the header «| Metoda | Ścieżka | Uwierzytelnienie | Rola | Opis | Kody odpowiedzi |», the separator «|---|---|---|---|---|---|» and exactly these ten rows, each on its own line and matching backend/app/routers/health.py, auth.py and tickets.py: «| GET | `/api/health` | nie | — | stan API: `{"status": "ok"}` | 200 |» «| POST | `/api/auth/register` | nie | — | rejestracja konta z rolą `employee` (pola `username`, `password`, `full_name`, `department`) | 201, 409, 422 |» «| POST | `/api/auth/login` | nie | — | logowanie: zwraca `{user}` i ustawia ciasteczko `session` (`HttpOnly; Secure; SameSite=Strict`) | 200, 401, 422, 429 |» «| POST | `/api/auth/logout` | nie | — | usuwa sesję na serwerze i ciasteczko | 200 |» «| GET | `/api/auth/me` | tak | dowolna | dane zalogowanego użytkownika | 200, 401 |» «| POST | `/api/tickets` | tak | dowolna | utworzenie zgłoszenia | 201, 401, 422 |» «| GET | `/api/tickets` | tak | dowolna | lista zgłoszeń z parametrami `status`, `search`, `limit` (1–100, domyślnie 50) i `offset`; pracownik widzi własne, agent wszystkie | 200, 401, 422 |» «| GET | `/api/tickets/{ticket_id}` | tak | dowolna | szczegóły z najnowszymi 50 komentarzami i `comment_count`; cudze zgłoszenie pracownika daje 404 | 200, 401, 404, 422 |» «| PATCH | `/api/tickets/{ticket_id}` | tak | `agent` | zmiana `status`, `priority`, `assignee_id` | 200, 400, 401, 403, 404, 422 |» «| POST | `/api/tickets/{ticket_id}/comments` | tak | dowolna | dodanie komentarza do widocznego zgłoszenia | 201, 401, 404, 422 |». Then, in README.md line 17, replace only the paragraph's last sentence, «Szczegóły, diagramy i opis API znajdują się w [raporcie z Fazy 1](docs/faza-1-dev/README.md), a opis zabezpieczeń w [raporcie z Fazy 2](docs/faza-2-sec/README.md).», with «[Raport z Fazy 1](docs/faza-1-dev/README.md) opisuje architekturę, diagramy i API w stanie z commita `ab08633`. Opis zabezpieczeń oraz bieżącego API (sekcja 7: zmiany względem Fazy 1 i tabela endpointów) zawiera [raport z Fazy 2](docs/faza-2-sec/README.md), a kontrakt wygenerowany przez FastAPI — [`docs/faza-2-sec/dowody/openapi.json`](docs/faza-2-sec/dowody/openapi.json).». Keep the paragraph on one physical line, and leave its first sentence and the CORS sentence (DOC-002's) exactly as you find them. Add no `#` anchor to any link, and do not edit docs/faza-1-dev/README.md. [user, 2026-11-18]
+**Verification-plan:** `Grep pattern=opis API znajdują się w \[raporcie z Fazy 1\] path=README.md` → (empty); `Grep pattern=^## [78]\. |^\| (GET|POST|PATCH) \| \`/api/ path=docs/faza-2-sec/README.md` → 12 matched lines in this order: the `## 7.` heading, 10 endpoint rows, the `## 8. Weryfikacja` heading; `Grep pattern="(get|post|patch)": \{ path=docs/faza-2-sec/dowody/openapi.json` → exactly 10 matched lines, the same count as the endpoint rows; `Grep pattern=^\| POST \| \`/api/auth/login\` \|.*404 path=docs/faza-2-sec/README.md` → (empty); `Grep pattern=status_code=4\d\d path=backend/app` → the matched lines name only 400, 401, 403, 404, 409 and 429 (plus 403 or 4xx added by another fix in this run is acceptable); `Grep pattern=Fazy 1\]\(docs/faza-1-dev/README\.md\) opisuje .* w stanie z commita \`ab08633\` path=README.md` → exactly one match, on line 17; `Read path=docs/faza-2-sec/README.md` PATCH row of the new table → `| PATCH | \`/api/tickets/{ticket_id}\` | tak | \`agent\` | zmiana \`status\`, \`priority\`, \`assignee_id\` | 200, 400, 401, 403, 404, 422 |` (soft); `Read path=README.md:17:raw` → the excerpt contains `[Raport z Fazy 1](docs/faza-1-dev/README.md) opisuje architekturę, diagramy i API w stanie z commita \`ab08633\`` and links `docs/faza-2-sec/dowody/openapi.json` (soft)
+**Decision-pin:** block=8e3eb53c37e05d143eb3ad504cb8fdd1525ed112f46fee1ee73ae608bfa0494d | docs/faza-2-sec/README.md=4bb60fbebc8b03377b96ad93b86784270244490f:edit | backend/app/routers/health.py=44e8a5cce48b5bc65d9593527dea6dbf2a90abd5:ref | backend/app/routers/auth.py=81f122fccfe842c9fc946e6fdc233c456605a1d5:ref | backend/app/routers/tickets.py=5eddd2627a4d0abe7d9ec48bfaf59758ac05d874:ref | README.md=c376a6e086cc5b1d916d2b85ba66cdb338df368d:edit | docs/faza-2-sec/dowody/openapi.json=d42bbf17f7b57e36d6db73d6b8a43c7534a2058c:ref | docs/faza-1-dev/README.md=ce12d88374d613eaeb6c0e2c3ebec7555289755d:ref
+**Dispatch:** attempt 1 dispatched 2026-11-18
+**Verification:** advisory — greps for the old sentence, the 12 ordered heading and endpoint rows, 10 operations in openapi.json, the login 404 row and 4xx codes in the app ran with the expected output (the 403 in OriginCheckMiddleware is the allowed extra); re-reads of the PATCH row and README.md:17 are soft checks
 
 **Problem:**
 The diff edited this sentence but kept "Szczegóły, diagramy i opis API znajdują się w raporcie z Fazy 1". That report describes the `ab08633` contract, which Phase 2 changed: the health endpoint returns versions and the database path (`docs/faza-1-dev/README.md:169`), login returns `token` and can answer 404 (`:171`), logout only clears the cookie (`:172`), Bearer authentication is accepted (`:203`), Swagger is at `/docs` (`:52`, `:165`) and demo data is seeded by default (`:131`). The current contract is described only in `docs/faza-2-sec/README.md` §7 and `docs/faza-2-sec/dowody/openapi.json`. Related change: `backend/app/routers/auth.py:83-143`, `backend/app/routers/health.py:10-14`, `backend/app/config.py:15,17`.
@@ -284,13 +316,19 @@ Point the API description at the Phase 2 report §7 and `docs/faza-2-sec/dowody/
 ---
 
 ### [LOW] DOC-004: The event table implies internal_error contains client_ip, but it does not
+**Status:** ✅ Fixed (2026-11-18)
 
 **ID:** DOC-004
-**Location:** `docs/faza-2-sec/README.md:125`
+**Location:** `docs/faza-2-sec/README.md:138-139` (was: `docs/faza-2-sec/README.md:125`)
 **Category:** Documentation
 **Drift-class:** decision
 **Fix-policy:** needs-decision
 **Effort:** trivial
+**Decision:** A — In docs/faza-2-sec/README.md:139 (the `internal_error` row of the event table whose header at line 126 reads `| Zdarzenie | Poziom | Pola (poza `client_ip`) |`) change the last cell from "`error_id`, `method`, `path`, `exception`, `sql`" to "`error_id`, `method`, `path`, `exception`, `sql` (bez `client_ip`)", and in docs/faza-2-sec/README.md:138 (the `validation_failed` row) change "`client_ip` jest obecne jak w pozostałych zdarzeniach" to "`client_ip` jest obecne jak w pozostałych zdarzeniach `patchpoint.security`"; keep the `internal_error` row in the table and leave line 124, which already states that `client_ip` is the TCP peer `request.client.host` under `make run --no-proxy-headers`, unchanged. [user, 2026-11-18]
+**Verification-plan:** `Grep pattern=client_ip path=backend/app/main.py` → (empty); `Grep pattern=ERROR_LOGGER\.|SECURITY_LOGGER\. path=backend/app` → exactly two hits, `audit.py:33 SECURITY_LOGGER.log(` and `main.py:23 ERROR_LOGGER.error(` (line numbers may shift after other fixes in this run); `Grep pattern=client_ip path=docs/faza-2-sec/README.md` → the matches include the `| \`internal_error\`` row, which says the record has no `client_ip`, and the `validation_failed` row, which limits its claim to `patchpoint.security`; `Grep pattern=adres peera TCP path=docs/faza-2-sec/README.md` → one match, still containing `request.client.host` and `--no-proxy-headers`; `Read path=docs/faza-2-sec/README.md:120-145` → no table row and no sentence says or implies that `internal_error` has `client_ip`, and every row without an exception is a `patchpoint.security` event (soft)
+**Decision-pin:** block=484f624852921c78107581affd1f6eab8246f9c66585fadfc8957a9ac7482b2a | docs/faza-2-sec/README.md=ded467b0e6723b9710d1027e24d87e7805555fc7:edit
+**Dispatch:** attempt 1 dispatched 2026-11-18
+**Verification:** advisory — greps for client_ip in main.py, the two logger call sites, client_ip rows and the TCP peer sentence ran with the expected output; the re-read of docs/faza-2-sec/README.md:120-145 is a soft check
 
 **Problem:**
 The table header reads "Pola (poza `client_ip`)", which suggests that every row also carries `client_ip`. Line 123 limits "all contain `client_ip`" to the `patchpoint.security` events, and row `:137` labels `internal_error` as logger `patchpoint.errors`, so only the column header is ambiguous. `internal_error` is written by `backend/app/main.py:20-33` through its own `json.dumps` and has no `client_ip`; only `log_security_event` adds it (`backend/app/audit.py:31-32`). Related to SEC-003: the value of `client_ip` is the TCP peer unless proxy headers are disabled.
@@ -304,6 +342,7 @@ Add "(bez `client_ip`)" to the `internal_error` row, or move that row out of the
 ---
 
 ### [LOW] DOC-005: `make security-check` is documented as 22 checks, but by default 2 are skipped
+**Status:** ✅ Fixed (2026-11-18)
 
 **ID:** DOC-005
 **Location:** `README.md:140`
@@ -311,6 +350,11 @@ Add "(bez `client_ip`)" to the `internal_error` row, or move that row out of the
 **Drift-class:** decision
 **Fix-policy:** needs-decision
 **Effort:** easy
+**Decision:** A — In README.md, in Polish: change the tree comment at line 49 to `│   └── security_check.sh     # PoC regresji bezpieczeństwa: 22 sprawdzenia, [PODATNE]/[NAPRAWIONE]/[POMINIĘTE]`; change the comment of the `make security-check` line at README.md:87 to `# PoC bezpieczeństwa; wymaga działającego API; bez DB_PATH i API_LOG W-18 i SEC-020 są [POMINIĘTE]`; insert this paragraph right after the code block that closes at README.md:88: "Bez `DB_PATH` i `API_LOG` skrypt zgłasza W-18 i SEC-020 jako `[POMINIĘTE]`, a W-07 i W-09 sprawdza tylko przez API. API pisze logi na stderr, więc do pełnych 22 sprawdzeń uruchom je z kopią logu w pliku: `mkdir -p backend/data && PATCHPOINT_SEED_DEMO_DATA=true make run 2>&1 | tee backend/data/api.log`, a w drugim terminalu `DB_PATH=backend/data/patchpoint.db API_LOG=backend/data/api.log make security-check`. `DB_PATH` musi wskazywać bazę uruchomionego API (`PATCHPOINT_DATABASE_PATH`; czytają ją W-07, W-09 i SEC-020), a `API_LOG` plik z jego stderr (W-18 szuka w nim zdarzenia `login_failed`)."; change the table row at README.md:140 to ``| `make security-check` | uruchamia `scripts/security_check.sh` względem `API_URL`: 22 sprawdzenia regresji bezpieczeństwa; W-18 wymaga `API_LOG` (plik ze stderr API), SEC-020 wymaga `DB_PATH` (baza API), bez nich są `[POMINIĘTE]` |``; in docs/testing/plans/2026-11-17-patchpoint-phase-2-security-test-plan.md:798 replace the opening ``- `make security-check` (22 `[NAPRAWIONE]`),`` with ``- `DB_PATH=<the API's database> API_LOG=<the API's stderr log> make security-check` (22 `[NAPRAWIONE]`; without the two variables W-18 and SEC-020 are `[POMINIĘTE]`),``; leave Makefile and scripts/security_check.sh unchanged. [user, 2026-11-18]
+**Verification-plan:** `Grep pattern=^\s*skip  path=scripts/security_check.sh` → exactly two matched lines, `skip W-18 "brak API_LOG"` and `skip SEC-020 "brak DB_PATH"`; `Grep pattern=22 sprawdzenia|22 .\[NAPRAWIONE\] path=README.md` → every matched line also contains `POMINIĘTE` or both `DB_PATH` and `API_LOG`; `Grep pattern=22 .\[NAPRAWIONE\] path=docs/testing/plans/2026-11-17-patchpoint-phase-2-security-test-plan.md` → every matched line also contains `POMINIĘTE` or both `DB_PATH` and `API_LOG`; `Read path=README.md:84-96` → the paragraph after the quick-start block uses `backend/data/api.log` for both `tee` and `API_LOG=` and `backend/data/patchpoint.db` for `DB_PATH=` (soft)
+**Decision-pin:** block=440c745725630fe3837275e0068098fba8b7e710886318f8825a5ed988454d44 | README.md=589c83b742a1d16b3e751ae160b55f9c38ecae4e:edit | docs/testing/plans/2026-11-17-patchpoint-phase-2-security-test-plan.md=558f668d85c1a6583ed2287bcf7b52791f82d94f:edit | Makefile=a105f55bc2976abe3bf4a05ad645053e0cb1c3d1:ref | scripts/security_check.sh=b524dae0420272608337d32a5be483096c6e973b:ref
+**Dispatch:** attempt 1 dispatched 2026-11-18
+**Verification:** advisory — greps for the two skip lines and for the 22-check mentions in README.md and the QA plan ran with the expected output; the re-read of README.md:84-96 is a soft check
 
 **Problem:**
 `README.md:140`, `:49` and `:87` describe `make security-check` as running 22 security regression checks with `[PODATNE]`/`[NAPRAWIONE]` results. The Makefile passes neither `DB_PATH` nor `API_LOG` (`Makefile:33-34`), so W-18 and SEC-020 are reported as `POMINIĘTE` and W-07 falls back to an API-only check (`scripts/security_check.sh:229-230`, `:442-451`). A default run ends with `naprawione=20, pominięte=2`. The README never mentions `DB_PATH`, `API_LOG` or `[POMINIĘTE]`. The QA plan says the same at `docs/testing/plans/2026-11-17-patchpoint-phase-2-security-test-plan.md:798` ("22 `[NAPRAWIONE]`"). "22 sprawdzenia" is literally true (22 run, 2 skipped), so LOW.
