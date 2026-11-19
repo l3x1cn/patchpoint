@@ -102,7 +102,7 @@ Plan zawierał dosłowne treści plików; podczas wykonania zmieniono je tam, gd
 | Obszar | Plan | Stan faktyczny | Powód |
 |---|---|---|---|
 | Audit log ModSecurity | części `AFHZ` | `AHZ` (`deploy/proxy/Dockerfile`) | część F (nagłówki odpowiedzi) zapisywała `Set-Cookie` z tokenem sesji |
-| HTTP/2 w proxy | nie wspomniano | `HTTP2=off` | podatności HTTP/2 w nginx 1.30.6; pięć CVE nginx w `.trivyignore` do 2026-12-19, poprawka w 1.30.7-r0 nie jest jeszcze w tagu obrazu CRS |
+| HTTP/2 w proxy | nie wspomniano | `HTTP2=off` | podatności HTTP/2 w nginx 1.30.6; sześć CVE nginx w `.trivyignore` do 2026-12-19 (pięć niedotyczących konfiguracji i CVE-2026-118899, DoS przez TLS 1.3, przyjęte jako ryzyko po przebiegu CI), poprawka w 1.30.7-r0 nie jest jeszcze w tagu obrazu CRS |
 | `Host` do API | `proxy_set_header Host $host` | stała `${SERVER_NAME}` | przekierowania Starlette odbijałyby `Host` od klienta (Semgrep, zadanie 3) |
 | Adres w smoke | `https://127.0.0.1:<port>` | `https://patchpoint.localhost:<port>` | reguły CRS 920350 i 920180 razem blokują `POST` bez treści na numeryczny adres IP; sekrety poza argumentami procesów (jq przez stdin, ciasteczko w pliku 0600) |
 | Tryb plików w obrazach | `COPY` bez trybu plików | symboliczne `COPY --chmod` (zadania 1–2), potem `chmod -R` w `RUN` dla katalogów z podkatalogami (zadanie 8); `COPY --chmod` zostaje dla plików bez podkatalogów | BuildKit w Dockerze 28 odbiera podkatalogom bit `x` (przebieg CI 44477002456; [`dowody/ci.md`](dowody/ci.md)) |
