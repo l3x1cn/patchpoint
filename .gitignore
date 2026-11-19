@@ -18,3 +18,5 @@ backend/data/
 .av/run/
 deploy/proxy/dev-tls/
 reports/
+.env
+.api.env
