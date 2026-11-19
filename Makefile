@@ -4,10 +4,11 @@ API_PORT ?= 8000
 FRONTEND_PORT ?= 5500
 API_URL ?= http://$(API_HOST):$(API_PORT)
 API_IMAGE ?= patchpoint-api:local
+PROXY_IMAGE ?= patchpoint-proxy:local
 IMAGE_SOURCE := https://github.com/l3x1cn/patchpoint
 IMAGE_REVISION ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 
-.PHONY: install run test lint format typecheck frontend demo security-check images
+.PHONY: install run test lint format typecheck frontend demo security-check images dev-cert
 
 install:
 	cd $(BACKEND) && uv sync
@@ -38,3 +39,7 @@ security-check:
 
 images:
 	docker build --label org.opencontainers.image.source=$(IMAGE_SOURCE) --label org.opencontainers.image.revision=$(IMAGE_REVISION) --label org.opencontainers.image.title=patchpoint-api -t $(API_IMAGE) $(BACKEND)
+	docker build --label org.opencontainers.image.source=$(IMAGE_SOURCE) --label org.opencontainers.image.revision=$(IMAGE_REVISION) --label org.opencontainers.image.title=patchpoint-proxy -f deploy/proxy/Dockerfile -t $(PROXY_IMAGE) .
+
+dev-cert:
+	./scripts/dev_cert.sh deploy/proxy/dev-tls
