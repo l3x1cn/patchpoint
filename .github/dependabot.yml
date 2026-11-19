@@ -1,0 +1,26 @@
+# Dependabot co tydzień: SHA akcji w .github/workflows, zależności Pythona z backend/uv.lock i obrazy
+# bazowe Dockerfile. Cooldown 7 dni: świeże wydanie trafia do PR po tygodniu (lekcja z CVE-2026-33634);
+# aktualizacje bezpieczeństwa nie czekają. Obrazów Semgrep i Trivy (scripts/scan.sh) oraz wersji Ansible
+# (Makefile) Dependabot nie obsługuje; podbijamy je ręcznie razem z tabelą wersji w docs/faza-3-ops/README.md.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+  - package-ecosystem: uv
+    directory: "/backend"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+  - package-ecosystem: docker
+    directories:
+      - "/backend"
+      - "/deploy/proxy"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
