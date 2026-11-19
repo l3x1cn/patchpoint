@@ -20,3 +20,6 @@ deploy/proxy/dev-tls/
 reports/
 .env
 .api.env
+deploy/ansible/.ansible/
+deploy/ansible/inventory.yml
+deploy/ansible/group_vars/patchpoint/vault.yml

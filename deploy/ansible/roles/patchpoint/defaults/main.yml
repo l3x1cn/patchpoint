@@ -1,0 +1,15 @@
+---
+patchpoint_dir: /opt/patchpoint
+patchpoint_image_repo: ghcr.io/l3x1cn/patchpoint
+# Wymagane: -e patchpoint_image_tag=sha-<7 znaków SHA commita z main>
+patchpoint_image_tag: ""
+patchpoint_domain: ""
+patchpoint_seed_demo_data: false
+patchpoint_demo_password: ""
+patchpoint_ghcr_username: ""
+patchpoint_ghcr_token: ""
+patchpoint_hsts_max_age: 31536000
+patchpoint_backend_subnet: 10.250.0.0/24
+patchpoint_proxy_backend_ip: 10.250.0.10
+patchpoint_proxy_uid: 101
+patchpoint_compose_src: "{{ playbook_dir }}/../../compose.yaml"

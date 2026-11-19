@@ -1,0 +1,27 @@
+#!/usr/sbin/nft -f
+# Zarządzane przez Ansible (rola base). Zapora ruchu do samego hosta (hook input). Ruch do opublikowanych
+# portów proxy (80, 443) Docker przekierowuje przez DNAT do łańcuchów FORWARD, którymi zarządza sam. Plik
+# nie zawiera "flush ruleset", bo usunięcie reguł Dockera odcięłoby kontenery od sieci.
+table inet patchpoint_host
+delete table inet patchpoint_host
+
+table inet patchpoint_host {
+  chain input {
+    type filter hook input priority filter; policy drop;
+
+    iif "lo" accept
+    ct state established,related accept
+    ct state invalid drop
+
+    ip protocol icmp icmp type { echo-request, destination-unreachable, time-exceeded } accept
+    ip6 nexthdr icmpv6 icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem, echo-request, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept
+
+{% if base_ssh_allowed_ipv4 | length > 0 %}
+    ip saddr { {{ base_ssh_allowed_ipv4 | join(', ') }} } tcp dport 22 accept
+{% endif %}
+{% if base_ssh_allowed_ipv6 | length > 0 %}
+    ip6 saddr { {{ base_ssh_allowed_ipv6 | join(', ') }} } tcp dport 22 accept
+{% endif %}
+    tcp dport { 80, 443 } accept
+  }
+}

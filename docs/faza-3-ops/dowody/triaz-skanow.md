@@ -39,3 +39,5 @@ Uwagi:
 Podsumowanie po zadaniu 3: Semgrep 0 znalezisk, Trivy fs 0 HIGH/CRITICAL, Trivy obrazy 0 HIGH/CRITICAL z poprawką.
 
 Podsumowanie po zadaniu 5: Semgrep 0 znalezisk (po dodaniu `compose.yaml` i `scripts/stack_smoke.sh`; reguła `writable-filesystem-service` nie zgłosiła proxy, więc bez wyjątku `nosemgrep`), Trivy fs 0 HIGH/CRITICAL, Trivy obrazy 0 HIGH/CRITICAL z poprawką.
+
+Podsumowanie po zadaniu 6: Semgrep 0 znalezisk (po dodaniu `deploy/ansible/`; zestawy z `SEMGREP_CONFIGS` nie zawierają reguł dla Ansible, a poprawność playbooka sprawdza `make ansible-lint`), Trivy fs 0 HIGH/CRITICAL, bez nowych wyjątków w `.trivyignore`.
