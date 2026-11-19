@@ -1,0 +1,9 @@
+cd deploy/ansible && uvx --python 3.13 --from ansible-lint==26.11.0 --with ansible-core==2.19.15 ansible-lint
+
+Passed: 0 failure(s), 0 warning(s) in 28 files processed of 29 encountered. Profile 'production' was required, and it passed.
+cd deploy/ansible && uvx --python 3.13 --from ansible-core==2.19.15 ansible-galaxy collection install -r requirements.yml -p .ansible/collections
+Starting galaxy collection install process
+Nothing to do. All requested collections are already installed. If you want to reinstall them, consider using `--force`.
+cd deploy/ansible && ANSIBLE_COLLECTIONS_PATH=.ansible/collections uvx --python 3.13 --from ansible-core==2.19.15 ansible-playbook --syntax-check -i inventory.example.yml site.yml
+
+playbook: site.yml

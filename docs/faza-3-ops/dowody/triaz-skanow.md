@@ -43,3 +43,5 @@ Podsumowanie po zadaniu 5: Semgrep 0 znalezisk (po dodaniu `compose.yaml` i `scr
 Podsumowanie po zadaniu 6: Semgrep 0 znalezisk (po dodaniu `deploy/ansible/`; zestawy z `SEMGREP_CONFIGS` nie zawierają reguł dla Ansible, a poprawność playbooka sprawdza `make ansible-lint`), Trivy fs 0 HIGH/CRITICAL, bez nowych wyjątków w `.trivyignore`.
 
 Podsumowanie po zadaniu 7: Semgrep 0 znalezisk (po dodaniu `.github/workflows/ci.yml` i `.github/dependabot.yml`; zestaw `p/github-actions` nie zgłosił nic, bez wyjątków dla `ci.yml`), Trivy fs 0 HIGH/CRITICAL, Trivy obrazy 0 HIGH/CRITICAL z poprawką, bez nowych wpisów w `.trivyignore`.
+
+Podsumowanie końcowe (zadanie 9): Semgrep 0 znalezisk (275 reguł na 69 plikach, [`semgrep.txt`](semgrep.txt)), Trivy fs 0 HIGH/CRITICAL ([`trivy-fs.txt`](trivy-fs.txt)), Trivy obrazy 0 HIGH/CRITICAL z poprawką ([`trivy-obrazy.txt`](trivy-obrazy.txt); obraz API: Debian 13.7, obraz proxy: Alpine 3.24.4). W `.trivyignore` pozostaje pięć wpisów dla nginx (CVE-2026-113425, CVE-2026-121810, CVE-2026-123007, CVE-2026-123633, CVE-2026-123634) z datą przeglądu 2026-12-19; wyjątki `nosemgrep` i `trivy:ignore` bez zmian względem zadania 3.

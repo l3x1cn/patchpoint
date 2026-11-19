@@ -1,0 +1,18 @@
+./scripts/scan.sh fs
+
+Report Summary
+
+┌─────────────────────────┬────────────┬─────────────────┬─────────┬───────────────────┐
+│         Target          │    Type    │ Vulnerabilities │ Secrets │ Misconfigurations │
+├─────────────────────────┼────────────┼─────────────────┼─────────┼───────────────────┤
+│ backend/uv.lock         │     uv     │        0        │    -    │         -         │
+├─────────────────────────┼────────────┼─────────────────┼─────────┼───────────────────┤
+│ backend/Dockerfile      │ dockerfile │        -        │    -    │         0         │
+├─────────────────────────┼────────────┼─────────────────┼─────────┼───────────────────┤
+│ deploy/proxy/Dockerfile │ dockerfile │        -        │    -    │         0         │
+└─────────────────────────┴────────────┴─────────────────┴─────────┴───────────────────┘
+Legend:
+- '-': Not scanned
+- '0': Clean (no security findings detected)
+
+Bramka Trivy (trivy-fs): brak znalezisk HIGH i CRITICAL. Wyniki: reports/trivy-fs.json, reports/trivy-fs.sarif
