@@ -13,7 +13,7 @@ Pliki w tym katalogu dokumentują skanowanie, budowę i działanie obrazów oraz
 | [`smoke-stosu.txt`](smoke-stosu.txt) | `make stack-smoke > "$E/smoke-stosu.txt" 2>&1` | 27 kontroli `[OK]`, 0 `[BŁĄD]`: PoC z Fazy 2 w kontenerze API (22 × `[NAPRAWIONE]`), demo przez proxy, TLS i HSTS, WAF, ciasteczko `__Host-session`, `client_ip`, izolacja sieci, limit żądań; ostatnia linia `STACK SMOKE ZAKOŃCZONY POWODZENIEM` |
 | [`ansible-lint.txt`](ansible-lint.txt) | `make ansible-lint > "$E/ansible-lint.txt" 2>&1` | `ansible-lint` w profilu `production` bez naruszeń i `ansible-playbook --syntax-check` bez błędów; playbook nie był uruchamiany na serwerze |
 | [`triaz-skanow.md`](triaz-skanow.md) | zapisywany w zadaniach 3–9 | każde znalezisko skanerów z decyzją (naprawione, wyjątek) i podsumowania po kolejnych zadaniach |
-| [`ci.md`](ci.md) | zadanie 8: `gh run list`, `gh run view`, `gh api` dla przebiegów na GitHub Actions | przebieg potoku CI: pierwszy przebieg z błędem środowiska runnera, poprawka i przebieg zakończony wynikiem `success` |
+| [`ci.md`](ci.md) | zadanie 8: `gh run list`, `gh run view`, `gh api` dla przebiegów na GitHub Actions | przebieg potoku CI: zielony przebieg na gałęzi delivery (`success` w pięciu jobach, `publish` pominięty) oraz przebiegi nieudane (błąd środowiska runnera, nowa podatność w bazie Trivy) z poprawkami |
 
 ## Środowisko
 
