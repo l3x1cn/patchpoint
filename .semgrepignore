@@ -1,0 +1,13 @@
+# Ścieżki pomijane przez Semgrep (scripts/scan.sh). Testy pomijamy celowo: Ruff z regułami S skanuje je
+# z udokumentowanymi wyjątkami (backend/pyproject.toml), a Semgrep skanuje kod uruchamiany w produkcji.
+.git/
+.av/
+reports/
+docs/
+backend/.venv/
+backend/.mypy_cache/
+backend/.pytest_cache/
+backend/.ruff_cache/
+backend/tests/
+deploy/proxy/dev-tls/
+deploy/ansible/.ansible/

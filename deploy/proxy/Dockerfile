@@ -22,17 +22,16 @@ FROM owasp/modsecurity-crs:4.30.0-nginx-alpine-202611160811@sha256:27eba34c27e43
 # SSL_OCSP_STAPLING=off: certyfikat deweloperski nie ma adresu OCSP; dla Let's Encrypt ustawienie jest
 # bezpieczne niezależnie od tego, czy certyfikat ma adres OCSP.
 # MODSEC_AUDIT_LOG_PARTS=AFHZ: bez części B, I i J, czyli bez nagłówków i ciała żądań (ciasteczko, hasło).
+# HTTP2=off: nginx 1.30.6 ma podatności HTTP/2 (CVE-2026-123007, CVE-2026-123633, .trivyignore); do tego UI wystarcza HTTP/1.1.
 ENV BACKEND=http://api:8000 \
     SERVER_NAME=patchpoint.localhost \
+    HTTP2=off \
     PORT=8080 \
     SSL_PORT=8443 \
     SSL_CERT_FILE=/etc/nginx/tls/fullchain.pem \
-    SSL_CERT_KEY_FILE=/etc/nginx/tls/privkey.pem \
     SSL_OCSP_STAPLING=off \
     NGINX_ALWAYS_TLS_REDIRECT=on \
     PATCHPOINT_HSTS_MAX_AGE=31536000 \
-    PATCHPOINT_AUTH_RATE=10r/m \
-    PATCHPOINT_AUTH_BURST=5 \
     BLOCKING_PARANOIA=1 \
     ANOMALY_INBOUND=5 \
     ANOMALY_OUTBOUND=4 \
@@ -40,6 +39,13 @@ ENV BACKEND=http://api:8000 \
     MODSEC_RULE_ENGINE=on \
     MODSEC_AUDIT_LOG_FORMAT=JSON \
     MODSEC_AUDIT_LOG_PARTS=AFHZ
+# Heurystyka DS-0031 Trivy bierze te trzy zmienne za sekrety z powodu nazw (KEY, AUTH), a to ścieżka do pliku
+# klucza montowanego z hosta (sam klucz nie trafia do obrazu) i limit żądań. Wyjątek obejmuje wyłącznie tę
+# instrukcję ENV; nowych zmiennych nie dopisujemy tu bez sprawdzenia, że nie są sekretami.
+# trivy:ignore:DS-0031
+ENV SSL_CERT_KEY_FILE=/etc/nginx/tls/privkey.pem \
+    PATCHPOINT_AUTH_RATE=10r/m \
+    PATCHPOINT_AUTH_BURST=5
 COPY --from=ui --chmod=u=rwX,go=rX /ui/ /usr/share/nginx/html/
 COPY --chmod=u=rwX,go=rX deploy/proxy/templates/ /etc/nginx/templates/
 COPY --chmod=u=rw,go=r deploy/proxy/modsecurity/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf /opt/owasp-crs/rules/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf

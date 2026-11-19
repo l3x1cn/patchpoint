@@ -17,3 +17,4 @@ backend/data/
 .av/secrets.local.env
 .av/run/
 deploy/proxy/dev-tls/
+reports/

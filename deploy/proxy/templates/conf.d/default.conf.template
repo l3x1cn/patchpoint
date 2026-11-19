@@ -1,5 +1,5 @@
 # PatchPoint: UI i API pod jednym originem. Zastępuje conf.d/default.conf.template obrazu
-# owasp/modsecurity-crs; entrypoint podstawia ${...} ze środowiska, a zmienne nginx ($host, $uri) zostają.
+# owasp/modsecurity-crs; entrypoint podstawia ${...} ze środowiska, a zmienne nginx (np. $uri, $request_uri) zostają.
 # ModSecurity jest włączony dla całego kontekstu http w conf.d/modsecurity.conf obrazu.
 
 server_tokens off;
@@ -23,7 +23,9 @@ server {
     }
 
     if ($patchpoint_redirect_to_tls = on) {
-        return 301 https://$host:${SSL_REDIRECT_PORT}$request_uri;
+        # Host przekierowania to ten sam host, którego przeglądarka użyła w żądaniu; nagłówka Host nie da się
+        # ustawić z cudzej witryny, a stała nazwa zepsułaby wejście przez adres IP (smoke, lokalny stos).
+        return 301 https://$host:${SSL_REDIRECT_PORT}$request_uri; # nosemgrep: generic.nginx.security.request-host-used.request-host-used
     }
 
     include includes/patchpoint-app.conf;
