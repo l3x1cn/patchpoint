@@ -48,7 +48,11 @@ ENV SSL_CERT_KEY_FILE=/etc/nginx/tls/privkey.pem \
     PATCHPOINT_AUTH_RATE=10r/m \
     PATCHPOINT_AUTH_BURST=5
 COPY --from=ui --chmod=u=rwX,go=rX /ui/ /usr/share/nginx/html/
-COPY --chmod=u=rwX,go=rX deploy/proxy/templates/ /etc/nginx/templates/
+# Szablony mają podkatalogi, a symboliczne --chmod ze starszym BuildKitem (Docker 28 na runnerze CI) odbiera
+# podkatalogom bit x; dlatego tryb ustawia chmod, niezależnie od wersji buildera i trybu plików w checkoucie.
+COPY deploy/proxy/templates/ /etc/nginx/templates/
+USER root
+RUN chmod -R u=rwX,go=rX /etc/nginx/templates
 COPY --chmod=u=rw,go=r deploy/proxy/modsecurity/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf /opt/owasp-crs/rules/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf
 USER nginx
 EXPOSE 8080 8443
