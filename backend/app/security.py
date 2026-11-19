@@ -5,7 +5,6 @@ from typing import Final
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
 
-SESSION_COOKIE_NAME: Final = "session"
 PASSWORD_MIN_LENGTH: Final = 15
 PASSWORD_MAX_LENGTH: Final = 128
 
