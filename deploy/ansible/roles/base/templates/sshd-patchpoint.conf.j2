@@ -1,0 +1,11 @@
+# Zarządzane przez Ansible (rola base). Plik z prefiksem 10- jest czytany przed innymi plikami
+# sshd_config.d, a w sshd obowiązuje pierwsza wartość opcji.
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+X11Forwarding no
+AllowAgentForwarding no
+AllowTcpForwarding no
+MaxAuthTries 3
+LoginGraceTime 30

@@ -1,0 +1,8 @@
+---
+letsencrypt_domain: ""
+letsencrypt_email: ""
+letsencrypt_webroot: /opt/patchpoint/acme
+letsencrypt_tls_dir: /opt/patchpoint/tls
+letsencrypt_compose_dir: /opt/patchpoint
+letsencrypt_proxy_uid: 101
+letsencrypt_hook_path: /usr/local/sbin/patchpoint-cert-deploy

@@ -1,0 +1,19 @@
+---
+docker_apt_arch_map:
+  x86_64: amd64
+  aarch64: arm64
+docker_conflicting_packages:
+  - docker.io
+  - docker-compose
+  - docker-doc
+  - podman-docker
+  - containerd
+  - runc
+# python3-requests jest potrzebny modułowi community.docker.docker_login.
+docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+  - python3-requests

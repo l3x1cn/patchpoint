@@ -1,0 +1,7 @@
+---
+patchpoint_seed_demo_data: false
+patchpoint_ghcr_username: "{{ vault_ghcr_username }}"
+patchpoint_ghcr_token: "{{ vault_ghcr_token }}"
+patchpoint_demo_password: "{{ vault_patchpoint_demo_password | default('') }}"
+letsencrypt_domain: "{{ patchpoint_domain }}"
+letsencrypt_email: "{{ patchpoint_acme_email }}"

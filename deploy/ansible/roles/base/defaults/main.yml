@@ -1,0 +1,14 @@
+---
+# python3-debian: wymagany przez moduł deb822_repository (rola docker).
+base_packages:
+  - ca-certificates
+  - curl
+  - nftables
+  - openssl
+  - python3-debian
+  - unattended-upgrades
+# SSH tylko kluczem; zawęź źródła połączeń w inventory (domyślnie cały Internet).
+base_ssh_allowed_ipv4:
+  - 0.0.0.0/0
+base_ssh_allowed_ipv6:
+  - "::/0"

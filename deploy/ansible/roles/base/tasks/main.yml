@@ -1,0 +1,78 @@
+---
+- name: Sprawdź system i konto połączenia
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] in ['Debian', 'Ubuntu']
+      - ansible_user is defined
+      - ansible_user != 'root'
+    quiet: true
+    fail_msg: >-
+      Rola wyłącza logowanie roota przez SSH, więc połączenie wymaga konta administratora z sudo i kluczem
+      SSH (ansible_user w inventory, nie root), a system musi być Debianem albo Ubuntu.
+
+- name: Zainstaluj pakiety bazowe
+  ansible.builtin.apt:
+    name: "{{ base_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Włącz automatyczne aktualizacje bezpieczeństwa
+  ansible.builtin.template:
+    src: 20auto-upgrades.j2
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Utwardź serwer SSH
+  ansible.builtin.template:
+    src: sshd-patchpoint.conf.j2
+    dest: /etc/ssh/sshd_config.d/10-patchpoint.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Przeładuj SSH
+
+- name: Zapisz reguły zapory hosta
+  ansible.builtin.template:
+    src: nftables.conf.j2
+    dest: /etc/nftables.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/nft -c -f %s
+  notify: Przeładuj nftables
+
+- name: Utwórz katalog drop-inów usługi nftables
+  ansible.builtin.file:
+    path: /etc/systemd/system/nftables.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Ogranicz zatrzymywanie nftables do reguł hosta
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/nftables.service.d/10-patchpoint.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Zarządzane przez Ansible (rola base). Domyślne ExecStop usługi nftables w Debianie wykonuje
+      # "nft flush ruleset", co przy zatrzymaniu albo restarcie usługi usunęłoby też reguły Dockera
+      # (NAT i FORWARD) i odcięło kontenery od sieci. Zatrzymanie usuwa tylko tabelę patchpoint_host.
+      [Service]
+      ExecStop=
+      ExecStop=/usr/sbin/nft delete table inet patchpoint_host
+  notify: Przeładuj konfigurację systemd
+
+- name: Zastosuj konfigurację systemd przed uruchomieniem zapory
+  ansible.builtin.meta: flush_handlers
+
+- name: Włącz zaporę nftables
+  ansible.builtin.service:
+    name: nftables
+    enabled: true
+    state: started
