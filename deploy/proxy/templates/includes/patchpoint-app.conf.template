@@ -1,0 +1,46 @@
+# Lokalizacje wspólne dla serwera HTTP i HTTPS: statyczny UI z nagłówkami bezpieczeństwa i /api/ do API.
+root /usr/share/nginx/html;
+index index.html;
+client_max_body_size 128k;
+
+# Odpowiedzi generowane przez nginx (blokada WAF, limit żądań) w formacie API: {"detail": "..."}.
+# Odpowiedzi samego API przechodzą bez zmian (proxy_intercept_errors jest wyłączone).
+error_page 403 = @patchpoint_waf_blocked;
+error_page 429 = @patchpoint_rate_limited;
+
+location / {
+    try_files $uri $uri/ =404;
+    add_header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    add_header Cross-Origin-Opener-Policy "same-origin" always;
+    add_header Cache-Control "no-cache" always;
+}
+
+location /api/ {
+    include includes/patchpoint-proxy.conf;
+}
+
+location = /api/auth/login {
+    limit_req zone=patchpoint_auth burst=${PATCHPOINT_AUTH_BURST} nodelay;
+    include includes/patchpoint-proxy.conf;
+}
+
+location = /api/auth/register {
+    limit_req zone=patchpoint_auth burst=${PATCHPOINT_AUTH_BURST} nodelay;
+    include includes/patchpoint-proxy.conf;
+}
+
+location @patchpoint_waf_blocked {
+    default_type application/json;
+    add_header Cache-Control "no-store" always;
+    return 403 '{"detail":"Request blocked by the web application firewall"}';
+}
+
+location @patchpoint_rate_limited {
+    default_type application/json;
+    add_header Cache-Control "no-store" always;
+    return 429 '{"detail":"Too many requests, try again later"}';
+}
