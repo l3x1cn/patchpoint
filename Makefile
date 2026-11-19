@@ -8,7 +8,7 @@ PROXY_IMAGE ?= patchpoint-proxy:local
 IMAGE_SOURCE := https://github.com/l3x1cn/patchpoint
 IMAGE_REVISION ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 
-.PHONY: install run test lint format typecheck frontend demo security-check images dev-cert
+.PHONY: install run test lint format typecheck frontend demo security-check images dev-cert semgrep trivy-fs trivy-images scan
 
 install:
 	cd $(BACKEND) && uv sync
@@ -43,3 +43,15 @@ images:
 
 dev-cert:
 	./scripts/dev_cert.sh deploy/proxy/dev-tls
+
+semgrep:
+	./scripts/scan.sh semgrep
+
+trivy-fs:
+	./scripts/scan.sh fs
+
+trivy-images:
+	./scripts/scan.sh image api $(API_IMAGE)
+	./scripts/scan.sh image proxy $(PROXY_IMAGE)
+
+scan: semgrep trivy-fs images trivy-images
