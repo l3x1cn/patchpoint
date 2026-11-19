@@ -29,10 +29,11 @@ ENV PATH=/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PATCHPOINT_DATABASE_PATH=/data/patchpoint.db
 COPY --from=build /app/.venv /app/.venv
-# --chmod: tryb plików nie zależy od umask i uprawnień checkoutu; kod jest czytelny dla UID 10001, ale niezapisywalny.
-COPY --chmod=u=rwX,go=rX app /app/app
+# Tryb nie zależy od umask i uprawnień checkoutu: kod jest czytelny dla UID 10001, ale niezapisywalny.
+# chmod zamiast symbolicznego COPY --chmod: starszy BuildKit (Docker 28 na runnerze CI) odbiera podkatalogom bit x.
+COPY app /app/app
 # /data to punkt montowania wolumenu z bazą SQLite; nowy wolumen dziedziczy właściciela katalogu z obrazu.
-RUN mkdir /data && chown 10001:10001 /data
+RUN chmod -R u=rwX,go=rX /app/app && mkdir /data && chown 10001:10001 /data
 WORKDIR /app
 USER 10001:10001
 EXPOSE 8000
