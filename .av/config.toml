@@ -1,24 +1,41 @@
 version = 1
 
-# Local origins: the API from `make run` and the static UI from `make frontend` (Makefile targets
-# `run` and `frontend`), both bound to 127.0.0.1. Hosts use `patchpoint.localhost` like `API_BASE_URL`
-# in frontend/app.js: the CORS allow-list (backend/app/config.py) holds only http://patchpoint.localhost:5500,
-# and the session cookie is set for that host, a different site from `localhost` (SEC-001).
+# Local origins:
+# - ui and backend: the static UI from `make frontend` and the API from `make run` (Makefile targets
+#   `frontend` and `run`), both bound to 127.0.0.1 on two origins. Hosts use `patchpoint.localhost` like
+#   `API_BASE_URL` in frontend/app.js: the CORS allow-list (backend/app/config.py) holds only
+#   http://patchpoint.localhost:5500, and the session cookie is set for that host, a different site from
+#   `localhost`.
+# - stack and stack_tls: the compose stack from `make stack-up` (compose.yaml): the UI and /api/ on one
+#   origin behind the reverse proxy with the ModSecurity/OWASP CRS WAF (deploy/proxy/). HTTP on 8080 serves
+#   the application (local default PATCHPOINT_TLS_REDIRECT=off); HTTPS on 8443 uses the self-signed
+#   certificate from `make dev-cert` (deploy/proxy/dev-tls/fullchain.pem, SAN patchpoint.localhost and
+#   127.0.0.1), so curl needs `--cacert deploy/proxy/dev-tls/fullchain.pem`. On `stack` the WAF answers SQL
+#   injection and XSS payloads with 403 {"detail":"Request blocked by the web application firewall"} before
+#   they reach the API, and POST /api/auth/login and /api/auth/register are limited per client IP
+#   (10 per minute, burst 5; 429 {"detail":"Too many requests, try again later"}). Payload tests of the API
+#   itself belong on `backend` and `ui`.
 [env.targets]
 ui = "http://patchpoint.localhost:5500"
 backend = "http://patchpoint.localhost:8000"
+stack = "http://patchpoint.localhost:8080"
+stack_tls = "https://patchpoint.localhost:8443"
 
-# health: GET /api/health (backend/app/routers/health.py) and the UI root served by `make frontend`.
-# up: starts only the services that do not answer yet, then waits for both probes with curl.
-# Runtime files live in the git-ignored, user-owned .av/run/ directory (mode 0700), not in a
-# shared system temporary directory. The API gets a fresh SQLite file through PATCHPOINT_DATABASE_PATH and
-# seeds the demo accounts (DEMO_USERS in backend/app/database.py) because
-# PATCHPOINT_SEED_DEMO_DATA=true; PATCHPOINT_DEMO_PASSWORD is QA_AGENT_PASSWORD from the
-# git-ignored .av/secrets.local.env, so the demo agent `helpdesk` logs in with the QA agent
-# credentials.
-# down: stops the process group that up recorded.
+# health: GET /api/health of the API (backend/app/routers/health.py), the UI root served by
+# `make frontend`, and GET /api/health through the proxy of the stack.
+# up: starts only the services that do not answer yet, then waits for all probes with curl.
+# Runtime files live in the git-ignored, user-owned .av/run/ directory (mode 0700), not in a shared
+# system temporary directory. The dev API gets a fresh SQLite file through PATCHPOINT_DATABASE_PATH and
+# seeds the demo accounts (DEMO_USERS in backend/app/database.py) because PATCHPOINT_SEED_DEMO_DATA=true;
+# PATCHPOINT_DEMO_PASSWORD is QA_AGENT_PASSWORD from the git-ignored .av/secrets.local.env, so the demo
+# agent `helpdesk` logs in with the QA agent credentials. The stack runs as compose project `patchpoint-qa`
+# on a fresh volume and seeds the same accounts from .av/run/stack-api.env (mode 0600, written with the
+# shell's built-in printf, so the password never appears in a process argument list). A stack already
+# answering on :8080 is left running, like the dev servers.
+# down: removes the `patchpoint-qa` stack with its volume and env file, then stops the process group that
+# up recorded.
 [env.services]
-health = ["backend:/api/health", "ui:/"]
+health = ["backend:/api/health", "ui:/", "stack:/api/health"]
 up = '''
 set -eu
 d="$PWD/.av/run"
@@ -27,24 +44,31 @@ mkdir -p "$d"
 chmod 700 "$d"
 [ -O "$d" ] || { echo "$d is not owned by the current user" >&2; exit 1; }
 echo "$$" > "$d/pgid"
+pw=$(sed -n 's/^QA_AGENT_PASSWORD=//p' .av/secrets.local.env)
+[ -n "$pw" ] || { echo "QA_AGENT_PASSWORD is missing in .av/secrets.local.env" >&2; exit 1; }
 if ! ok http://patchpoint.localhost:8000/api/health; then
-  pw=$(sed -n 's/^QA_AGENT_PASSWORD=//p' .av/secrets.local.env)
-  [ -n "$pw" ] || { echo "QA_AGENT_PASSWORD is missing in .av/secrets.local.env" >&2; exit 1; }
   rm -f "$d/patchpoint.db" "$d/patchpoint.db-journal"
   PATCHPOINT_DATABASE_PATH="$d/patchpoint.db" PATCHPOINT_SEED_DEMO_DATA=true PATCHPOINT_DEMO_PASSWORD="$pw" make run > "$d/api.log" 2>&1 &
 fi
 if ! ok http://patchpoint.localhost:5500/; then
   make frontend > "$d/ui.log" 2>&1 &
 fi
+if ! ok http://patchpoint.localhost:8080/api/health; then
+  (umask 077 && printf 'PATCHPOINT_SEED_DEMO_DATA=true\nPATCHPOINT_DEMO_PASSWORD=%s\n' "$pw" > "$d/stack-api.env")
+  COMPOSE_PROJECT_NAME=patchpoint-qa docker compose down -v > "$d/stack.log" 2>&1 || true
+  COMPOSE_PROJECT_NAME=patchpoint-qa PATCHPOINT_API_ENV_FILE="$d/stack-api.env" make stack-up >> "$d/stack.log" 2>&1
+fi
 i=0
-until ok http://patchpoint.localhost:8000/api/health && ok http://patchpoint.localhost:5500/; do
+until ok http://patchpoint.localhost:8000/api/health && ok http://patchpoint.localhost:5500/ && ok http://patchpoint.localhost:8080/api/health; do
   i=$((i + 1))
-  [ "$i" -lt 60 ] || { echo "PatchPoint not ready after 60 s; see $d/api.log and $d/ui.log" >&2; exit 1; }
+  [ "$i" -lt 60 ] || { echo "PatchPoint not ready after 60 s; see $d/api.log, $d/ui.log and $d/stack.log" >&2; exit 1; }
   sleep 1
 done
 '''
 down = '''
 set -eu
+COMPOSE_PROJECT_NAME=patchpoint-qa docker compose down -v > /dev/null 2>&1 || true
+rm -f "$PWD/.av/run/stack-api.env"
 f="$PWD/.av/run/pgid"
 [ -f "$f" ] || exit 0
 pg=$(cat "$f")
@@ -54,16 +78,15 @@ kill -s TERM -- "-$pg" 2>/dev/null || true
 '''
 
 # State Check store `patchpoint`, the name the QA plan's State Checks use: the SQLite file at
-# PATCHPOINT_DATABASE_PATH (backend/app/config.py:12-14) that the API creates and opens with sqlite3
-# (init_db in backend/app/main.py:52 and backend/app/database.py:275-282; get_db in
-# backend/app/dependencies.py:25-27; connect in backend/app/database.py:118-122). The up above runs
-# in the repository root and starts the API with PATCHPOINT_DATABASE_PATH="$PWD/.av/run/patchpoint.db"
-# (.av/config.toml:24 and :33-34), so path is that repository-relative, git-ignored file (.av/run/
-# in .gitignore). It is the API's database only when that up started the API: an API already
-# answering on patchpoint.localhost:8000, such as a plain `make run`, keeps its own PATCHPOINT_DATABASE_PATH
-# (default backend/data/patchpoint.db, README.md:106), and up leaves it running
-# (.av/config.toml:30). The State Checks read users, sessions, login_failures and PRAGMA
-# user_version (backend/app/schema.sql:1-51).
+# PATCHPOINT_DATABASE_PATH (backend/app/config.py) that the dev API creates and opens with sqlite3 (init_db
+# in the lifespan of create_app in backend/app/main.py; init_db and connect in backend/app/database.py;
+# get_db in backend/app/dependencies.py). The up above runs in the repository root and starts the dev API
+# with PATCHPOINT_DATABASE_PATH="$PWD/.av/run/patchpoint.db", so path is that repository-relative,
+# git-ignored file (.av/run/ in .gitignore). It is the dev API's database only when that up started the
+# API: an API already answering on patchpoint.localhost:8000, such as a plain `make run`, keeps its own
+# PATCHPOINT_DATABASE_PATH (default backend/data/patchpoint.db), and up leaves it running. The stack's
+# database lives in the compose volume of `patchpoint-qa` and has no store. The State Checks read users,
+# sessions, login_failures and PRAGMA user_version (backend/app/schema.sql).
 [env.stores.patchpoint]
 kind = "sql"
 engine = "sqlite"
