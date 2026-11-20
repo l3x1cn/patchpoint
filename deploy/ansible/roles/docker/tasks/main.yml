@@ -20,6 +20,19 @@
     state: present
     update_cache: true
 
+- name: Włącz automatyczne aktualizacje pakietów Dockera
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/52patchpoint-docker
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      // Zarządzane przez Ansible (rola docker). Domyślne listy unattended-upgrades obejmują tylko archiwa
+      // dystrybucji, więc bez tego wpisu Docker Engine, containerd i runc z download.docker.com nie
+      // dostawałyby poprawek po instalacji. Dopisuje źródło do listy z 50unattended-upgrades (operator ::).
+      // live-restore (daemon.json) utrzymuje kontenery przy restarcie demona po aktualizacji.
+      Unattended-Upgrade::Origins-Pattern:: "origin=Docker,label=Docker CE";
+
 - name: Skonfiguruj demona Dockera
   ansible.builtin.template:
     src: daemon.json.j2

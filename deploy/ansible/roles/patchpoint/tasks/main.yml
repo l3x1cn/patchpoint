@@ -3,14 +3,19 @@
   ansible.builtin.assert:
     that:
       - patchpoint_domain is match('^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$')
-      - patchpoint_image_tag is match('^sha-[0-9a-f]{7}$')
+      - (patchpoint_api_digest | length > 0 and patchpoint_proxy_digest | length > 0) or patchpoint_image_tag is match('^sha-[0-9a-f]{7}$')
+      - patchpoint_image_tag | length == 0 or patchpoint_image_tag is match('^sha-[0-9a-f]{7}$')
+      - patchpoint_api_digest | length == 0 or patchpoint_api_digest is match('^sha256:[0-9a-f]{64}$')
+      - patchpoint_proxy_digest | length == 0 or patchpoint_proxy_digest is match('^sha256:[0-9a-f]{64}$')
       - patchpoint_ghcr_username | length > 0
       - patchpoint_ghcr_token | length > 0
       - not (patchpoint_seed_demo_data | bool) or patchpoint_demo_password is match('^[A-Za-z0-9_-]{15,128}$')
     quiet: true
     fail_msg: >-
       Wymagane wartości: patchpoint_domain (inventory, nazwa domeny małymi literami), patchpoint_image_tag
-      (-e patchpoint_image_tag=sha-<7 znaków SHA commita z main>), vault_ghcr_username i vault_ghcr_token
+      (-e patchpoint_image_tag=sha-<7 znaków SHA commita z main; niewymagany, gdy podano oba digesty),
+      opcjonalnie patchpoint_api_digest i patchpoint_proxy_digest (-e, format sha256:<64 znaki hex>, z podsumowania
+      jobu publish), vault_ghcr_username i vault_ghcr_token
       (Ansible Vault, group_vars/patchpoint/vault.yml) oraz, przy patchpoint_seed_demo_data=true,
       vault_patchpoint_demo_password (Vault, 15-128 znaków z zestawu A-Za-z0-9_-).
 

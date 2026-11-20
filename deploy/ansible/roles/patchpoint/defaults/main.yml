@@ -1,8 +1,12 @@
 ---
 patchpoint_dir: /opt/patchpoint
 patchpoint_image_repo: ghcr.io/l3x1cn/patchpoint
-# Wymagane: -e patchpoint_image_tag=sha-<7 znaków SHA commita z main>
+# Wymagane, gdy nie podano obu digestów: -e patchpoint_image_tag=sha-<7 znaków SHA commita z main>
 patchpoint_image_tag: ""
+# Opcjonalne: digesty z podsumowania jobu publish (sha256:<64 znaki hex>). Gdy ustawione, obraz jest
+# wdrażany po digeście (image@digest), a tag nie ma wpływu na to, co zostanie uruchomione.
+patchpoint_api_digest: ""
+patchpoint_proxy_digest: ""
 patchpoint_domain: ""
 patchpoint_seed_demo_data: false
 patchpoint_demo_password: ""

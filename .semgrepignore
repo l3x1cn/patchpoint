@@ -11,3 +11,4 @@ backend/.ruff_cache/
 backend/tests/
 deploy/proxy/dev-tls/
 deploy/ansible/.ansible/
+deploy/ansible/tools/.venv/

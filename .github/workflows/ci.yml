@@ -177,10 +177,28 @@ jobs:
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           docker load -i images/api.tar
           docker load -i images/proxy.tar
           short="${GITHUB_SHA::7}"
           printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
           docker push "${IMAGE_REPO}/api:sha-${short}"
           docker push "${IMAGE_REPO}/proxy:sha-${short}"
+          # Digesty wysłanych obrazów odczytane z rejestru: wdrożenie po digeście (patchpoint_api_digest,
+          # patchpoint_proxy_digest w roli Ansible) nie zależy od tego, na co wskazuje tag w momencie wdrożenia.
+          api_digest="$(docker buildx imagetools inspect "${IMAGE_REPO}/api:sha-${short}" --format '{{.Manifest.Digest}}')"
+          proxy_digest="$(docker buildx imagetools inspect "${IMAGE_REPO}/proxy:sha-${short}" --format '{{.Manifest.Digest}}')"
           docker logout ghcr.io
+          for digest in "$api_digest" "$proxy_digest"; do
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "Nieprawidłowy digest obrazu: $digest" >&2; exit 1; }
+          done
+          {
+            echo "### Opublikowane obrazy (sha-${short})"
+            echo
+            echo "| Obraz | Tag | Digest |"
+            echo "|---|---|---|"
+            echo "| api | \`sha-${short}\` | \`${api_digest}\` |"
+            echo "| proxy | \`sha-${short}\` | \`${proxy_digest}\` |"
+            echo
+            echo "Wdrożenie po digeście: \`-e patchpoint_api_digest=${api_digest} -e patchpoint_proxy_digest=${proxy_digest}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
