@@ -1,10 +1,10 @@
 # Raport z Fazy 3 (OPS) — PatchPoint
 
-Dokument opisuje wynik Fazy 3 projektu „AI-Driven DevSecOps” (Scenariusz 5: Menadżer Zadań IT): kontenery z bezpiecznymi obrazami, stos z reverse proxy (TLS, WAF), potok CI/CD ze skanerami, logiczną architekturę sieci oraz wdrożenie na serwerze VPS z Ansible. Jest jednocześnie Sekcją Ops końcowego Raportu Architektonicznego DevSecOps (Sekcja Sec: [`../faza-2-sec/README.md`](../faza-2-sec/README.md), raport zbiorczy: [`../raport-devsecops.md`](../raport-devsecops.md)). Powiązane dokumenty: [dziennik promptów](prompty.md), [dowody](dowody/README.md).
+Dokument opisuje wynik Fazy 3 projektu „AI-Driven DevSecOps” (Scenariusz 5: Menadżer Zadań IT): kontenery z bezpiecznymi obrazami, stos z reverse proxy (TLS, WAF), potok CI/CD ze skanerami, logiczną architekturę sieci oraz wdrożenie na serwerze VPS z Ansible. Jest jednocześnie Sekcją Ops końcowego Raportu Architektonicznego DevSecOps (Sekcja Sec: [`../faza-2-sec/README.md`](../faza-2-sec/README.md), raport zbiorczy: [`../raport-devsecops.md`](../raport-devsecops.md)). Powiązane dokumenty: [dowody](dowody/README.md).
 
 ## 1. Cel fazy
 
-Punkty „Faza 3: OPS” z instrukcji kursu (pełny tekst: [`../faza-1-dev/prompty.md`](../faza-1-dev/prompty.md), prompt nr 1):
+Punkty „Faza 3: OPS” z instrukcji kursu:
 
 > ● Aplikacja musi działać w chmurze. Zaprojektujcie bezpieczny plik Dockerfile (wymagane m.in. zasada rootless, multi-stage build, okrojony obraz bazowy).
 >
@@ -22,7 +22,7 @@ Punkty „Faza 3: OPS” z instrukcji kursu (pełny tekst: [`../faza-1-dev/promp
 
 ## 2. Metoda pracy z AI
 
-Plan Fazy 3 powstał z AI w trybie planowania po trzech rundach pytań do zespołu (hosting, topologia, zakres potoku, sposób realizacji WAF i IaC, weryfikacja na GitHubie); sprawdzono wtedy aktualne wersje obrazów, akcji i narzędzi. Dziewięć zadań wykonali agenci delivery, a wynik każdego zadania przejrzał osobny agent-recenzent przed commitem. Definicję potoku CI/CD (`.github/workflows/ci.yml`) wygenerowała AI: najpierw jako dosłowny fragment planu, potem przez agenta w zadaniu 7. Pierwszy przebieg potoku na GitHubie wykrył błąd środowiska runnera, którego lokalne uruchomienie nie pokazało; opis i poprawka są w [`dowody/ci.md`](dowody/ci.md). Prompty i podział pracy: [`prompty.md`](prompty.md).
+Plan Fazy 3 powstał z AI w trybie planowania po trzech rundach pytań do zespołu (hosting, topologia, zakres potoku, sposób realizacji WAF i IaC, weryfikacja na GitHubie); sprawdzono wtedy aktualne wersje obrazów, akcji i narzędzi. Dziewięć zadań wykonali agenci delivery, a wynik każdego zadania przejrzał osobny agent-recenzent przed commitem. Definicję potoku CI/CD (`.github/workflows/ci.yml`) wygenerowała AI: najpierw jako dosłowny fragment planu, potem przez agenta w zadaniu 7. Pierwszy przebieg potoku na GitHubie wykrył błąd środowiska runnera, którego lokalne uruchomienie nie pokazało; opis i poprawka są w [`dowody/ci.md`](dowody/ci.md).
 
 ## 3. Środowisko docelowe
 

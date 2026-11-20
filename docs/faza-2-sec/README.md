@@ -1,10 +1,10 @@
 # Raport z Fazy 2 (SEC) — PatchPoint
 
-Dokument opisuje wynik Fazy 2 projektu „AI-Driven DevSecOps” (Scenariusz 5: Menadżer Zadań IT): audyt bezpieczeństwa kodu z Fazy 1 z pomocą AI, weryfikację znalezisk i naprawę aplikacji. Jest jednocześnie Sekcją Sec końcowego Raportu Architektonicznego DevSecOps: zestawieniem luk wykrytych w Fazie 1, opisem wektorów ataku i mechanizmów naprawy. Powiązane dokumenty: [audyt Red Team](audyt-red-team.md), [threat model](threat-model.md), [dziennik promptów](prompty.md), [dowody](dowody/README.md), [rejestr słabości Fazy 1](../faza-1-dev/rejestr-slabosci.md).
+Dokument opisuje wynik Fazy 2 projektu „AI-Driven DevSecOps” (Scenariusz 5: Menadżer Zadań IT): audyt bezpieczeństwa kodu z Fazy 1 z pomocą AI, weryfikację znalezisk i naprawę aplikacji. Jest jednocześnie Sekcją Sec końcowego Raportu Architektonicznego DevSecOps: zestawieniem luk wykrytych w Fazie 1, opisem wektorów ataku i mechanizmów naprawy. Powiązane dokumenty: [audyt Red Team](audyt-red-team.md), [threat model](threat-model.md), [dowody](dowody/README.md), [rejestr słabości Fazy 1](../faza-1-dev/rejestr-slabosci.md).
 
 ## 1. Cel fazy
 
-Punkty „Faza 2: SEC” z instrukcji kursu (pełny tekst instrukcji: [`../faza-1-dev/prompty.md`](../faza-1-dev/prompty.md), prompt nr 1):
+Punkty „Faza 2: SEC” z instrukcji kursu:
 
 > - Zmieńcie rolę i stwórzcie z AI "Wirtualnego Red Teamera". Przeprowadźcie statyczną analizę wygenerowanego kodu (SAST), prosząc o wskazanie luk z listy OWASP Top 10.
 > - Zweryfikujcie poprawność wykrytych podatności (Threat Modeling) dla Waszego konkretnego wektora ataku opisanego w scenariuszu.
@@ -14,12 +14,12 @@ Punkty „Faza 2: SEC” z instrukcji kursu (pełny tekst instrukcji: [`../faza-
 |---|---|---|
 | „Wirtualny Red Teamer” i SAST według OWASP Top 10 | ślepy audyt AI (16 luk RT-01…RT-16) oraz klasyczny SAST: Ruff z regułami `S` (Bandit) | [`audyt-red-team.md`](audyt-red-team.md), [`audyt-red-team-wynik.md`](audyt-red-team-wynik.md), [`dowody/ruff-s-faza-1.txt`](dowody/ruff-s-faza-1.txt) |
 | Weryfikacja podatności (Threat Modeling) | STRIDE na diagramie przepływu danych, werdykty dla każdego znaleziska, skrypt PoC uruchomiony na kodzie Fazy 1 | [`threat-model.md`](threat-model.md), [`dowody/poc-faza-1.txt`](dowody/poc-faza-1.txt) |
-| Naprawa kodu z AI | poprawki w backendzie, frontendzie i skryptach, opisane w sekcjach 4 i 6; przebieg pracy z agentami w dzienniku promptów (zadania 2–6) | sekcje 4 i 6 tego dokumentu, [`prompty.md`](prompty.md) |
+| Naprawa kodu z AI | poprawki w backendzie, frontendzie i skryptach, opisane w sekcjach 4 i 6 | sekcje 4 i 6 tego dokumentu |
 | Połatana aplikacja działa | testy, scenariusz end-to-end i ten sam PoC na kodzie Fazy 2 | [`dowody/testy.txt`](dowody/testy.txt), [`dowody/demo.txt`](dowody/demo.txt), [`dowody/poc-faza-2.txt`](dowody/poc-faza-2.txt) |
 
 ## 2. Metoda pracy z AI
 
-Audyt wykonał osobny agent AI tylko do odczytu, który widział wyłącznie kod `backend/app/**` i `frontend/**`: ślepy audyt przeprowadzono przed napisaniem planu, bez rejestru słabości z Fazy 1. Znaleziska zweryfikowano w threat modelu (kod, uruchomienie bibliotek, porównanie z rejestrem i z code review Fazy 1). Poprawki napisali agenci delivery, zadanie po zadaniu, a wynik każdego zadania przejrzał osobny agent-recenzent. Przed naprawą i po niej uruchomiono ten sam skrypt PoC (`scripts/security_check.sh`): 22 sprawdzenia `[PODATNE]` na kodzie Fazy 1 i 22 `[NAPRAWIONE]` na kodzie Fazy 2. Po zakończeniu delivery przewidziano jeszcze QA i końcowy code review. Prompty i podział pracy: [`prompty.md`](prompty.md).
+Audyt wykonał osobny agent AI tylko do odczytu, który widział wyłącznie kod `backend/app/**` i `frontend/**`: ślepy audyt przeprowadzono przed napisaniem planu, bez rejestru słabości z Fazy 1. Znaleziska zweryfikowano w threat modelu (kod, uruchomienie bibliotek, porównanie z rejestrem i z code review Fazy 1). Poprawki napisali agenci delivery, zadanie po zadaniu, a wynik każdego zadania przejrzał osobny agent-recenzent. Przed naprawą i po niej uruchomiono ten sam skrypt PoC (`scripts/security_check.sh`): 22 sprawdzenia `[PODATNE]` na kodzie Fazy 1 i 22 `[NAPRAWIONE]` na kodzie Fazy 2. Po zakończeniu delivery przewidziano jeszcze QA i końcowy code review.
 
 ## 3. Wyniki audytu i porównanie z rejestrem
 
