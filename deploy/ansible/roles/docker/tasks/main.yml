@@ -1,0 +1,52 @@
+---
+- name: Usuń pakiety kolidujące z Docker Engine
+  ansible.builtin.apt:
+    name: "{{ docker_conflicting_packages }}"
+    state: absent
+
+- name: Dodaj repozytorium Docker Engine
+  ansible.builtin.deb822_repository:
+    name: docker
+    types: [deb]
+    uris: "https://download.docker.com/linux/{{ ansible_facts['distribution'] | lower }}"
+    suites: ["{{ ansible_facts['distribution_release'] }}"]
+    components: [stable]
+    architectures: ["{{ docker_apt_arch_map[ansible_facts['architecture']] }}"]
+    signed_by: "https://download.docker.com/linux/{{ ansible_facts['distribution'] | lower }}/gpg"
+
+- name: Zainstaluj Docker Engine i Docker Compose
+  ansible.builtin.apt:
+    name: "{{ docker_packages }}"
+    state: present
+    update_cache: true
+
+- name: Włącz automatyczne aktualizacje pakietów Dockera
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/52patchpoint-docker
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      // Zarządzane przez Ansible (rola docker). Domyślne listy unattended-upgrades obejmują tylko archiwa
+      // dystrybucji, więc bez tego wpisu Docker Engine, containerd i runc z download.docker.com nie
+      // dostawałyby poprawek po instalacji. Dopisuje źródło do listy z 50unattended-upgrades (operator ::).
+      // live-restore (daemon.json) utrzymuje kontenery przy restarcie demona po aktualizacji.
+      Unattended-Upgrade::Origins-Pattern:: "origin=Docker,label=Docker CE";
+
+- name: Skonfiguruj demona Dockera
+  ansible.builtin.template:
+    src: daemon.json.j2
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Zrestartuj Dockera
+
+- name: Włącz usługę Docker
+  ansible.builtin.service:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Zastosuj konfigurację demona Dockera przed wdrożeniem
+  ansible.builtin.meta: flush_handlers

@@ -1,0 +1,104 @@
+---
+- name: Sprawdź zmienne wdrożenia
+  ansible.builtin.assert:
+    that:
+      - patchpoint_domain is match('^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$')
+      - (patchpoint_api_digest | length > 0 and patchpoint_proxy_digest | length > 0) or patchpoint_image_tag is match('^sha-[0-9a-f]{7}$')
+      - patchpoint_image_tag | length == 0 or patchpoint_image_tag is match('^sha-[0-9a-f]{7}$')
+      - patchpoint_api_digest | length == 0 or patchpoint_api_digest is match('^sha256:[0-9a-f]{64}$')
+      - patchpoint_proxy_digest | length == 0 or patchpoint_proxy_digest is match('^sha256:[0-9a-f]{64}$')
+      - patchpoint_ghcr_username | length > 0
+      - patchpoint_ghcr_token | length > 0
+      - not (patchpoint_seed_demo_data | bool) or patchpoint_demo_password is match('^[A-Za-z0-9_-]{15,128}$')
+    quiet: true
+    fail_msg: >-
+      Wymagane wartości: patchpoint_domain (inventory, nazwa domeny małymi literami), patchpoint_image_tag
+      (-e patchpoint_image_tag=sha-<7 znaków SHA commita z main; niewymagany, gdy podano oba digesty),
+      opcjonalnie patchpoint_api_digest i patchpoint_proxy_digest (-e, format sha256:<64 znaki hex>, z podsumowania
+      jobu publish), vault_ghcr_username i vault_ghcr_token
+      (Ansible Vault, group_vars/patchpoint/vault.yml) oraz, przy patchpoint_seed_demo_data=true,
+      vault_patchpoint_demo_password (Vault, 15-128 znaków z zestawu A-Za-z0-9_-).
+
+- name: Utwórz katalogi wdrożenia
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ patchpoint_dir }}", mode: "0750" }
+    - { path: "{{ patchpoint_dir }}/secrets", mode: "0700" }
+    - { path: "{{ patchpoint_dir }}/acme", mode: "0755" }
+    - { path: "{{ patchpoint_dir }}/tls", mode: "0755" }
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Skopiuj definicję stosu compose
+  ansible.builtin.copy:
+    src: "{{ patchpoint_compose_src }}"
+    dest: "{{ patchpoint_dir }}/compose.yaml"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Zapisz zmienne stosu
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ patchpoint_dir }}/.env"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Zapisz sekrety API
+  ansible.builtin.template:
+    src: api.env.j2
+    dest: "{{ patchpoint_dir }}/secrets/api.env"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Utwórz tymczasowy certyfikat TLS do pierwszego startu proxy
+  ansible.builtin.command:
+    argv:
+      - openssl
+      - req
+      - -x509
+      - -newkey
+      - ec
+      - -pkeyopt
+      - ec_paramgen_curve:prime256v1
+      - -noenc
+      - -days
+      - "7"
+      - -subj
+      - "/CN={{ patchpoint_domain }}"
+      - -keyout
+      - "{{ patchpoint_dir }}/tls/privkey.pem"
+      - -out
+      - "{{ patchpoint_dir }}/tls/fullchain.pem"
+    creates: "{{ patchpoint_dir }}/tls/fullchain.pem"
+
+- name: Ustaw właściciela klucza TLS na użytkownika proxy
+  ansible.builtin.file:
+    path: "{{ patchpoint_dir }}/tls/privkey.pem"
+    owner: "{{ patchpoint_proxy_uid }}"
+    group: "{{ patchpoint_proxy_uid }}"
+    mode: "0400"
+
+- name: Zaloguj Dockera do GitHub Container Registry
+  community.docker.docker_login:
+    registry_url: ghcr.io
+    username: "{{ patchpoint_ghcr_username }}"
+    password: "{{ patchpoint_ghcr_token }}"
+  no_log: true
+
+- name: Uruchom stos PatchPoint
+  community.docker.docker_compose_v2:
+    project_src: "{{ patchpoint_dir }}"
+    pull: always
+    remove_orphans: true
+    state: present
+    wait: true
+    wait_timeout: 180

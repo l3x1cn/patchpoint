@@ -10,7 +10,6 @@ from app.audit import log_security_event
 from app.config import Settings
 from app.database import connect
 from app.schemas import Role, UserResponse
-from app.security import SESSION_COOKIE_NAME
 from app.sessions import SessionRejectedError, authenticate_session
 
 
@@ -33,7 +32,7 @@ type DbConnection = Annotated[sqlite3.Connection, Depends(get_db)]
 async def get_current_user(
     request: Request, conn: DbConnection, settings: AppSettings
 ) -> UserResponse:
-    token = request.cookies.get(SESSION_COOKIE_NAME)
+    token = request.cookies.get(settings.cookie_name)
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
 

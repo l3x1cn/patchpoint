@@ -1,0 +1,6 @@
+# Kontekst obrazu API (backend/Dockerfile): tylko pliki potrzebne do budowy.
+*
+!pyproject.toml
+!uv.lock
+!app/
+**/__pycache__

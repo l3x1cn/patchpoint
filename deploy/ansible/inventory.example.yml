@@ -1,0 +1,15 @@
+---
+# Wzór inventory: skopiuj do inventory.yml (ignorowany przez git) i wpisz własne wartości.
+all:
+  children:
+    patchpoint:
+      hosts:
+        patchpoint-vps:
+          ansible_host: 203.0.113.10
+          ansible_user: admin
+          patchpoint_domain: helpdesk.example.com
+          patchpoint_acme_email: admin@example.com
+          # Źródła, z których dozwolone jest SSH (zapora nftables).
+          base_ssh_allowed_ipv4:
+            - 198.51.100.0/24
+          base_ssh_allowed_ipv6: []

@@ -1,0 +1,93 @@
+# PatchPoint — stos produkcyjny (Faza 3):
+# - proxy: nginx z ModSecurity i OWASP CRS (deploy/proxy/Dockerfile), jedyny punkt wejścia (sieć edge):
+#   TLS, WAF, limit żądań, nagłówki bezpieczeństwa, statyczny UI i /api/ przekazywane do API;
+# - api: FastAPI (backend/Dockerfile) wyłącznie w sieci backend (internal: bez opublikowanych portów i bez
+#   wyjścia do Internetu), z bazą SQLite na wolumenie api-data.
+# Lokalnie: make stack-up (http://patchpoint.localhost:8080, https://patchpoint.localhost:8443 z certyfikatem
+# z make dev-cert). Na serwerze wartości zmiennych pochodzą z .env zapisywanego przez Ansible
+# (deploy/ansible/roles/patchpoint/templates/env.j2). Obrazy buduje make images albo CI.
+name: patchpoint
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  api:
+    image: ${PATCHPOINT_API_IMAGE:-patchpoint-api:local}
+    restart: unless-stopped
+    environment:
+      # Originy przeglądarki (lista JSON) dla kontroli Origin i CORS; w produkcji tylko https://<domena>.
+      PATCHPOINT_CORS_ORIGINS: '${PATCHPOINT_PUBLIC_ORIGINS:-["http://patchpoint.localhost:8080","https://patchpoint.localhost:8443"]}'
+      PATCHPOINT_COOKIE_NAME: ${PATCHPOINT_COOKIE_NAME:-session}
+      # uvicorn przyjmuje X-Forwarded-For wyłącznie od adresu proxy w sieci backend.
+      FORWARDED_ALLOW_IPS: ${PATCHPOINT_PROXY_BACKEND_IP:-10.250.0.10}
+    env_file:
+      # Sekrety API (np. PATCHPOINT_DEMO_PASSWORD): plik 0600 spoza repozytorium; bez pliku API nie ma sekretów.
+      - path: ${PATCHPOINT_API_ENV_FILE:-.api.env}
+        required: false
+    volumes:
+      - api-data:/data
+      - type: tmpfs
+        target: /tmp
+        tmpfs:
+          size: 16777216
+    networks:
+      - backend
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    cpus: 1.0
+    pids_limit: 256
+    logging: *logging
+
+  proxy:
+    image: ${PATCHPOINT_PROXY_IMAGE:-patchpoint-proxy:local}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - ${PATCHPOINT_HTTP_BIND:-127.0.0.1:8080}:8080
+      - ${PATCHPOINT_HTTPS_BIND:-127.0.0.1:8443}:8443
+    environment:
+      SERVER_NAME: ${PATCHPOINT_DOMAIN:-patchpoint.localhost}
+      # Lokalnie HTTP obsługuje aplikację (przeglądarka nie ufa certyfikatowi deweloperskiemu);
+      # w produkcji on: 301 na HTTPS, z wyjątkiem wyzwań ACME.
+      NGINX_ALWAYS_TLS_REDIRECT: ${PATCHPOINT_TLS_REDIRECT:-off}
+      SSL_REDIRECT_PORT: ${PATCHPOINT_HTTPS_PUBLIC_PORT:-8443}
+      # Lokalnie 0: HSTS dla patchpoint.localhost wymusiłby HTTPS także w trybie deweloperskim (5500, 8000).
+      PATCHPOINT_HSTS_MAX_AGE: ${PATCHPOINT_HSTS_MAX_AGE:-0}
+    volumes:
+      - ${PATCHPOINT_TLS_DIR:-./deploy/proxy/dev-tls}:/etc/nginx/tls:ro
+      - ${PATCHPOINT_ACME_DIR:-./deploy/proxy/acme}:/var/www/acme:ro
+    networks:
+      edge: {}
+      backend:
+        ipv4_address: ${PATCHPOINT_PROXY_BACKEND_IP:-10.250.0.10}
+    # Bez read_only: obraz owasp/modsecurity-crs zapisuje przy starcie konfigurację do /etc/nginx,
+    # /etc/modsecurity.d i /opt/owasp-crs (wariant read-only nie jest publikowany).
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
+    logging: *logging
+
+networks:
+  edge: {}
+  backend:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${PATCHPOINT_BACKEND_SUBNET:-10.250.0.0/24}
+
+volumes:
+  api-data: {}

@@ -1,0 +1,43 @@
+PATCHPOINT_API_IMAGE=patchpoint-api:local PATCHPOINT_PROXY_IMAGE=patchpoint-proxy:local ./scripts/stack_smoke.sh
+PatchPoint — smoke obrazów i stosu compose
+Obraz API: patchpoint-api:local
+Obraz proxy: patchpoint-proxy:local
+Data: 2026-11-19T13:42:53+01:00
+
+==> Część 1: obrazy
+[OK] obraz API działa jako 10001:10001
+[OK] obraz proxy działa jako nginx
+[OK] obraz patchpoint-api:local ma HEALTHCHECK
+[OK] obraz patchpoint-proxy:local ma HEALTHCHECK
+[OK] obraz API nie zawiera pip
+
+==> Część 2: kontener API i PoC z Fazy 2
+[OK] PoC Fazy 2 w kontenerze API: 22 × [NAPRAWIONE]
+     Podsumowanie: podatne=0, naprawione=22, pominięte=0
+[OK] log kontenera API nie zawiera hasła demo
+
+==> Część 3: stos compose z proxy, WAF i TLS
+[OK] UI przez HTTPS: 200, CSP z frame-ancestors, HSTS i nagłówki bezpieczeństwa, bez nagłówka Server
+[OK] UI wywołuje względne /api/ i ma CSP connect-src 'self' w meta
+[OK] HTTP przekierowuje na HTTPS (301)
+[OK] wyzwania ACME nie są przekierowywane na HTTPS (404 dla brakującego pliku)
+[OK] GET /api/health przez proxy: 200, Cache-Control z API i HSTS z proxy
+[OK] demo end-to-end przez proxy (logowanie, zgłoszenia, PATCH, komentarze, wylogowanie)
+     DEMO ZAKOŃCZONE POWODZENIEM
+[OK] rejestracja z silnym hasłem (apostrofy, cudzysłowy, znaczniki HTML) przechodzi przez WAF
+[OK] logowanie ustawia __Host-session z HttpOnly, Secure, Path=/, SameSite=Strict i bez Domain
+[OK] sesja działa tylko pod nazwą __Host-session (200), pod nazwą session: 401
+[OK] obcy Origin: 403 "Origin not allowed", a sesja pozostaje ważna
+[OK] WAF blokuje SQL injection w parametrze search (403, JSON)
+[OK] WAF blokuje XSS w polu full_name (403, JSON)
+[OK] odmowa dostępu do /metrics/nginx: 403 z neutralnym komunikatem proxy
+[OK] audit log WAF zawiera reguły 942xxx (SQLi) i 941xxx (XSS)
+[OK] logi proxy nie zawierają haseł ani tokenu sesji
+[OK] client_ip w logu API to adres klienta, nie wartość z nagłówka klienta ani adres proxy
+[OK] procesy bez uprawnień roota: API 10001, proxy 101
+[OK] kontener API: system plików tylko do odczytu, cap_drop ALL, no-new-privileges
+[OK] API nie ma opublikowanego portu
+[OK] API nie ma wyjścia do Internetu (sieć backend: internal)
+[OK] limit żądań logowania: 10 z 12 odpowiedzi to 429 z JSON, pozostałe 401 (bez 5xx)
+
+STACK SMOKE ZAKOŃCZONY POWODZENIEM

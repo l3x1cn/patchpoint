@@ -1,0 +1,6 @@
+---
+# Wzór sekretów: skopiuj do group_vars/patchpoint/vault.yml (ignorowany przez git), wpisz wartości
+# i zaszyfruj: ansible-vault encrypt group_vars/patchpoint/vault.yml
+vault_ghcr_username: github-user
+vault_ghcr_token: wpisz-token-read-packages
+vault_patchpoint_demo_password: ""

@@ -23,7 +23,6 @@ from app.schemas import (
     UserResponse,
 )
 from app.security import (
-    SESSION_COOKIE_NAME,
     hash_password,
     simulate_password_check,
     verify_password,
@@ -142,7 +141,7 @@ async def login(
     clear_login_failures(conn, payload.username)
     token = create_session(conn, user_id=row["id"], settings=settings)
     response.set_cookie(
-        key=SESSION_COOKIE_NAME,
+        key=settings.cookie_name,
         value=token,
         max_age=settings.session_absolute_minutes * 60,
         path="/",
@@ -159,10 +158,10 @@ async def login(
 async def logout(
     request: Request, response: Response, conn: DbConnection, settings: AppSettings
 ) -> MessageResponse:
-    token = request.cookies.get(SESSION_COOKIE_NAME)
+    token = request.cookies.get(settings.cookie_name)
     user_id = end_session(conn, token) if token else None
     response.delete_cookie(
-        SESSION_COOKIE_NAME,
+        settings.cookie_name,
         path="/",
         secure=settings.cookie_secure,
         httponly=True,

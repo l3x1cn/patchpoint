@@ -1,0 +1,48 @@
+---
+- name: Sprawdź zmienne certyfikatu
+  ansible.builtin.assert:
+    that:
+      - letsencrypt_domain | length > 0
+      - letsencrypt_email is match('^[^@\s]+@[^@\s]+$')
+    quiet: true
+    fail_msg: >-
+      Wymagane wartości: patchpoint_domain i patchpoint_acme_email w inventory (group_vars przekazują je
+      jako letsencrypt_domain i letsencrypt_email).
+
+- name: Zainstaluj certbota
+  ansible.builtin.apt:
+    name: certbot
+    state: present
+
+- name: Zainstaluj hook wdrożenia certyfikatu
+  ansible.builtin.template:
+    src: patchpoint-cert-deploy.sh.j2
+    dest: "{{ letsencrypt_hook_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+# certbot zapisuje --deploy-hook w konfiguracji odnowień, więc hook działa też przy automatycznym odnawianiu.
+- name: Wystaw certyfikat Let's Encrypt metodą webroot
+  ansible.builtin.command:
+    argv:
+      - certbot
+      - certonly
+      - --webroot
+      - --webroot-path
+      - "{{ letsencrypt_webroot }}"
+      - --domain
+      - "{{ letsencrypt_domain }}"
+      - --email
+      - "{{ letsencrypt_email }}"
+      - --agree-tos
+      - --non-interactive
+      - --deploy-hook
+      - "{{ letsencrypt_hook_path }}"
+    creates: "/etc/letsencrypt/live/{{ letsencrypt_domain }}/fullchain.pem"
+
+- name: Włącz automatyczne odnawianie certyfikatu
+  ansible.builtin.service:
+    name: certbot.timer
+    enabled: true
+    state: started
