@@ -2,7 +2,7 @@ PATCHPOINT_API_IMAGE=patchpoint-api:local PATCHPOINT_PROXY_IMAGE=patchpoint-prox
 PatchPoint — smoke obrazów i stosu compose
 Obraz API: patchpoint-api:local
 Obraz proxy: patchpoint-proxy:local
-Data: 2026-11-19T08:23:54+01:00
+Data: 2026-11-19T13:42:53+01:00
 
 ==> Część 1: obrazy
 [OK] obraz API działa jako 10001:10001
@@ -30,6 +30,7 @@ Data: 2026-11-19T08:23:54+01:00
 [OK] obcy Origin: 403 "Origin not allowed", a sesja pozostaje ważna
 [OK] WAF blokuje SQL injection w parametrze search (403, JSON)
 [OK] WAF blokuje XSS w polu full_name (403, JSON)
+[OK] odmowa dostępu do /metrics/nginx: 403 z neutralnym komunikatem proxy
 [OK] audit log WAF zawiera reguły 942xxx (SQLi) i 941xxx (XSS)
 [OK] logi proxy nie zawierają haseł ani tokenu sesji
 [OK] client_ip w logu API to adres klienta, nie wartość z nagłówka klienta ani adres proxy
