@@ -52,7 +52,7 @@ Statyczny frontend (`http://patchpoint.localhost:5500`) wywołuje przez `fetch` 
 │   └── tests/                # testy pytest logiki biznesowej, kontraktów API i zabezpieczeń
 ├── compose.yaml              # stos produkcyjny: proxy (sieć edge) i API (sieć backend, internal)
 ├── deploy/
-│   ├── ansible/              # playbook site.yml, role base, docker, patchpoint i letsencrypt, wzory inventory.example.yml i vault.example.yml
+│   ├── ansible/              # playbook site.yml, role base, docker, patchpoint i letsencrypt, wzory inventory.example.yml i vault.example.yml; tools/ to zablokowany projekt uv z ansible-core i ansible-lint
 │   └── proxy/                # obraz reverse proxy z WAF
 │       ├── Dockerfile        # nginx + ModSecurity + OWASP CRS, UID 101, UI pod jednym originem
 │       ├── Dockerfile.dockerignore # allowlista kontekstu budowy obrazu proxy
@@ -194,9 +194,9 @@ Konta powstają tylko przy `PATCHPOINT_SEED_DEMO_DATA=true`; hasło wszystkich k
 | `make stack-up` | `make dev-cert` i `make images`, potem uruchamia stos z `compose.yaml` (`http://patchpoint.localhost:8080`, `https://patchpoint.localhost:8443`) |
 | `make stack-down` | zatrzymuje stos (`docker compose down`) |
 | `make stack-smoke` | smoke obrazów i stosu (`scripts/stack_smoke.sh`): PoC bezpieczeństwa w kontenerze, TLS, WAF, limit żądań, izolacja sieci; wymaga wcześniejszego `make images` |
-| `make semgrep` | bramka Semgrep (SAST) z obrazu przypiętego po digeście; kod 1 przy znalezisku |
-| `make trivy-fs` | bramka Trivy na repozytorium (zależności z `backend/uv.lock`, sekrety, konfiguracja Dockerfile); kod 1 przy HIGH lub CRITICAL |
-| `make trivy-images` | bramka Trivy na obrazach API i proxy; kod 1 przy HIGH lub CRITICAL z poprawką |
+| `make semgrep` | bramka Semgrep (SAST) z obrazu przypiętego po digeście; kod wyjścia różny od 0 przy znalezisku |
+| `make trivy-fs` | bramka Trivy na repozytorium (zależności z `backend/uv.lock`, sekrety, konfiguracja Dockerfile); kod wyjścia różny od 0 przy HIGH lub CRITICAL z dostępną poprawką |
+| `make trivy-images` | bramka Trivy na obrazach API i proxy; kod wyjścia różny od 0 przy HIGH lub CRITICAL z poprawką |
 | `make scan` | `semgrep`, `trivy-fs`, `images` i `trivy-images` po kolei |
 | `make ansible-lint` | `ansible-lint` w profilu `production` i `ansible-playbook --syntax-check` dla `deploy/ansible` |
 

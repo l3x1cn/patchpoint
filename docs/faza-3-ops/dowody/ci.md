@@ -16,7 +16,7 @@ Zielony przebieg na końcowym stanie gałęzi delivery:
 | Data | 2026-11-19 (utworzony 12:04:21 UTC) |
 | Wynik | `success` |
 
-Kolejne commity tej gałęzi zawierają wyłącznie dokumentację i uruchamiają własne przebiegi potoku; nie zmieniają danych wejściowych budowy obrazów (kodu aplikacji, Dockerfile, szablonów proxy, `.trivyignore`, workflow), więc nie są tu osobno opisywane. Ten plik nie podaje wyniku przebiegów po commicie `26d93eb`.
+Przebieg `44520467614` na commicie `26d93eb` to ostatni zapisany przebieg potoku dla dostarczonego stanu. Kolejne commity tej gałęzi (poprawki z przeglądu) zmieniają kod i dokumentację, a ich przebiegi CI nie są opisane w tym pliku.
 
 ## Joby
 
