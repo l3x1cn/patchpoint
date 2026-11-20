@@ -69,9 +69,9 @@ Statyczny frontend (`http://patchpoint.localhost:5500`) wywołuje przez `fetch` 
 │   ├── stack_smoke.sh        # smoke obrazów i stosu compose (make stack-smoke)
 │   └── dev_cert.sh           # certyfikat deweloperski (make dev-cert)
 └── docs/
-    ├── faza-1-dev/           # raport Fazy 1, dziennik promptów, rejestr słabości, dowody
-    ├── faza-2-sec/           # raport Fazy 2, audyt Red Team, threat model, dziennik promptów, dowody
-    ├── faza-3-ops/           # raport Fazy 3 (Sekcja Ops), dziennik promptów, dowody (w tym triaż skanów i przebieg CI)
+    ├── faza-1-dev/           # raport Fazy 1, rejestr słabości, dowody
+    ├── faza-2-sec/           # raport Fazy 2, audyt Red Team, threat model, dowody
+    ├── faza-3-ops/           # raport Fazy 3 (Sekcja Ops), dowody (w tym triaż skanów i przebieg CI)
     ├── plans/                # plany implementacji Faz 1, 2 i 3
     ├── raport-devsecops.md   # Raport Architektoniczny DevSecOps (Sekcje Sec i Ops)
     ├── reviews/              # raporty code review
@@ -203,17 +203,14 @@ Konta powstają tylko przy `PATCHPOINT_SEED_DEMO_DATA=true`; hasło wszystkich k
 ## Dokumentacja
 
 - [Raport z Fazy 1 (DEV)](docs/faza-1-dev/README.md)
-- [Dziennik promptów AI — Faza 1](docs/faza-1-dev/prompty.md)
 - [Rejestr słabości W-01…W-18](docs/faza-1-dev/rejestr-slabosci.md)
 - [Dowody uruchomienia — Faza 1](docs/faza-1-dev/dowody/README.md)
 - [Raport z Fazy 2 (SEC) — Sekcja Sec raportu DevSecOps](docs/faza-2-sec/README.md)
 - [Threat model](docs/faza-2-sec/threat-model.md)
 - [Audyt Red Team z AI](docs/faza-2-sec/audyt-red-team.md)
-- [Dziennik promptów AI — Faza 2](docs/faza-2-sec/prompty.md)
 - [Dowody — Faza 2](docs/faza-2-sec/dowody/README.md)
 - [Raport z Fazy 3 (OPS) — Sekcja Ops raportu DevSecOps](docs/faza-3-ops/README.md)
 - [Raport Architektoniczny DevSecOps (Sekcje Sec i Ops)](docs/raport-devsecops.md)
-- [Dziennik promptów AI — Faza 3](docs/faza-3-ops/prompty.md)
 - [Dowody — Faza 3](docs/faza-3-ops/dowody/README.md)
 - [Raport QA Fazy 1](docs/testing/reports/2026-11-16-patchpoint-helpdesk-mvp-report.md)
 - [Raport code review Fazy 1](docs/reviews/2026-11-16-delivery-faza-1-mvp.md)

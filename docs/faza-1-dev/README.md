@@ -1,6 +1,6 @@
 # Raport z Fazy 1 (DEV) — PatchPoint
 
-Dokument opisuje wynik Fazy 1 projektu „AI-Driven DevSecOps” (Scenariusz 5: Menadżer Zadań IT): działający, celowo uproszczony system zgłaszania awarii sprzętu do działu Helpdesk, wygenerowany z pomocą AI. Powiązane dokumenty: [dziennik promptów](prompty.md), [rejestr słabości](rejestr-slabosci.md), [dowody uruchomienia](dowody/README.md).
+Dokument opisuje wynik Fazy 1 projektu „AI-Driven DevSecOps” (Scenariusz 5: Menadżer Zadań IT): działający, celowo uproszczony system zgłaszania awarii sprzętu do działu Helpdesk, wygenerowany z pomocą AI. Powiązane dokumenty: [rejestr słabości](rejestr-slabosci.md), [dowody uruchomienia](dowody/README.md).
 
 ## 1. Cel fazy
 
@@ -12,7 +12,7 @@ Punkty „Faza 1: DEV” z instrukcji kursu:
 
 | Wymaganie | Realizacja | Dowód |
 |---|---|---|
-| Generowanie kodu z AI | Plan i kod powstały z udziałem Claude (Anthropic) w harnessie omp; zadania realizowali agenci wtyczki delivery | [`prompty.md`](prompty.md) |
+| Generowanie kodu z AI | Plan i kod powstały z udziałem Claude (Anthropic) w harnessie omp; zadania realizowali agenci wtyczki delivery | [sekcja 3 tego dokumentu](#3-metoda-pracy-z-ai) |
 | Logika biznesowa i komunikacja z SQLite | Zgłoszenia, przepływ statusów, komentarze, role, sesje; surowy `sqlite3`, baza w pliku `backend/data/patchpoint.db` | [`dowody/testy.txt`](dowody/testy.txt), [`dowody/demo.txt`](dowody/demo.txt) |
 | Celowy Draft/MVP | 18 świadomie pozostawionych słabości W-01…W-18 | [`rejestr-slabosci.md`](rejestr-slabosci.md) |
 | Dowód uruchomienia | Wyniki `make lint`, `make typecheck`, `make test`, `make demo` oraz kontrakt OpenAPI | [`dowody/`](dowody/README.md) |
@@ -31,7 +31,7 @@ Dodatkowo W-18 (brak logowania zdarzeń bezpieczeństwa) utrudnia wykrywanie ata
 
 ## 3. Metoda pracy z AI
 
-Całość powstała w trybie „plan, potem realizacja”. W trybie planowania AI przeanalizowało repozytorium i środowisko, zweryfikowało wersje pakietów w PyPI oraz zachowanie CORS w Starlette, zadało pytania doprecyzowujące i przygotowało plan, który przejrzał model doradczy. Instrukcję „Draft/MVP” przełożono na jawne wymagania W-xx w planie oraz zakaz komentarzy zdradzających słabości w kodzie. Pięć zadań wykonali kolejno agenci wtyczki delivery, a wynik każdego przeglądał osobny agent-recenzent przed commitem. Pełny dziennik promptów, pytań i odpowiedzi oraz mapa zadanie → agent → commit znajdują się w [`prompty.md`](prompty.md).
+Całość powstała w trybie „plan, potem realizacja”. W trybie planowania AI przeanalizowało repozytorium i środowisko, zweryfikowało wersje pakietów w PyPI oraz zachowanie CORS w Starlette, zadało pytania doprecyzowujące i przygotowało plan, który przejrzał model doradczy. Instrukcję „Draft/MVP” przełożono na jawne wymagania W-xx w planie oraz zakaz komentarzy zdradzających słabości w kodzie. Pięć zadań wykonali kolejno agenci wtyczki delivery, a wynik każdego przeglądał osobny agent-recenzent przed commitem.
 
 ## 4. Architektura logiczna
 

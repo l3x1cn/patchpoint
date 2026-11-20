@@ -23,3 +23,6 @@ reports/
 deploy/ansible/.ansible/
 deploy/ansible/inventory.yml
 deploy/ansible/group_vars/patchpoint/vault.yml
+
+# Dzienniki promptów AI zostają lokalnie, nie trafiają do repozytorium
+docs/faza-*/prompty.md
