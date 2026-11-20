@@ -1,0 +1,7 @@
+# Kontekst obrazu proxy (deploy/proxy/Dockerfile, budowa z katalogu głównego): tylko UI i konfiguracja proxy.
+*
+!frontend/index.html
+!frontend/app.js
+!frontend/styles.css
+!deploy/proxy/templates/
+!deploy/proxy/modsecurity/

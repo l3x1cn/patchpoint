@@ -1,0 +1,12 @@
+#!/bin/sh
+# Zarządzane przez Ansible (rola letsencrypt). certbot uruchamia ten hook po wystawieniu i po każdym
+# odnowieniu certyfikatu. Kopiuje certyfikat do katalogu montowanego przez proxy (klucz tylko dla
+# UID {{ letsencrypt_proxy_uid }}) i przeładowuje nginx bez przerywania ruchu.
+set -eu
+lineage="${RENEWED_LINEAGE:?certbot nie ustawił RENEWED_LINEAGE}"
+tls_dir="{{ letsencrypt_tls_dir }}"
+install -m 0644 -o root -g root "$lineage/fullchain.pem" "$tls_dir/fullchain.pem.new"
+install -m 0400 -o {{ letsencrypt_proxy_uid }} -g {{ letsencrypt_proxy_uid }} "$lineage/privkey.pem" "$tls_dir/privkey.pem.new"
+mv -f "$tls_dir/fullchain.pem.new" "$tls_dir/fullchain.pem"
+mv -f "$tls_dir/privkey.pem.new" "$tls_dir/privkey.pem"
+docker compose --project-directory "{{ letsencrypt_compose_dir }}" exec -T proxy nginx -s reload

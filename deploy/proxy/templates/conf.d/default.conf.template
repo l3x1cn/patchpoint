@@ -1,0 +1,56 @@
+# PatchPoint: UI i API pod jednym originem. Zastępuje conf.d/default.conf.template obrazu
+# owasp/modsecurity-crs; entrypoint podstawia ${...} ze środowiska, a zmienne nginx (np. $uri, $request_uri) zostają.
+# ModSecurity jest włączony dla całego kontekstu http w conf.d/modsecurity.conf obrazu.
+
+server_tokens off;
+more_clear_headers Server;
+
+# Wyzwania ACME HTTP-01 (Let's Encrypt) nigdy nie idą na HTTPS. Kluczem jest $uri (ścieżka po
+# normalizacji), więc segmenty ../ nie omijają przekierowania.
+map $uri $patchpoint_redirect_to_tls {
+    default ${NGINX_ALWAYS_TLS_REDIRECT};
+    ~^/\.well-known/acme-challenge/ off;
+}
+
+server {
+    listen ${PORT} default_server;
+    server_name ${SERVER_NAME};
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/acme;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+
+    if ($patchpoint_redirect_to_tls = on) {
+        # Przekierowanie idzie na stałą nazwę serwera, a nie na nagłówek Host od klienta (tak samo jak w
+        # includes/patchpoint-proxy.conf); żądanie przez adres IP albo inną nazwę trafia na nazwę z certyfikatu.
+        return 301 https://${SERVER_NAME}:${SSL_REDIRECT_PORT}$request_uri;
+    }
+
+    include includes/patchpoint-app.conf;
+    include includes/location_common.conf;
+}
+
+server {
+    listen ${SSL_PORT} ssl default_server;
+    server_name ${SERVER_NAME};
+
+    ssl_certificate ${SSL_CERT_FILE};
+    ssl_certificate_key ${SSL_CERT_KEY_FILE};
+    ssl_protocols ${SSL_PROTOCOLS};
+    ssl_ciphers ${SSL_CIPHERS};
+    ssl_prefer_server_ciphers ${SSL_PREFER_CIPHERS};
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:PatchPointTLS:10m;
+    ssl_session_tickets off;
+    ssl_dhparam /etc/ssl/certs/dhparam-${SSL_DH_BITS}.pem;
+    ssl_stapling ${SSL_OCSP_STAPLING};
+    ssl_stapling_verify ${SSL_OCSP_STAPLING};
+
+    # HSTS bez includeSubDomains i preload: nie zakładamy, że inne subdomeny mają HTTPS.
+    more_set_headers "Strict-Transport-Security: max-age=${PATCHPOINT_HSTS_MAX_AGE}";
+
+    include includes/patchpoint-app.conf;
+    include includes/location_common.conf;
+}

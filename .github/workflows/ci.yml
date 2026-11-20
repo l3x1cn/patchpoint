@@ -1,0 +1,204 @@
+# Potok CI/CD PatchPoint (Faza 3) dla każdego pull requesta i pushu na main.
+# 1. Przed budową obrazów, równolegle: quality (ruff z regułami S, mypy, pytest z pokryciem),
+#    semgrep (SAST), trivy-fs (podatności zależności z backend/uv.lock, sekrety, konfiguracja Dockerfile)
+#    i ansible (ansible-lint w profilu production oraz --syntax-check playbooka).
+# 2. build (po zielonych jobach z punktu 1): obrazy api i proxy (make images), bramka Trivy obu obrazów
+#    (HIGH/CRITICAL z poprawką) i smoke stosu compose (scripts/stack_smoke.sh: PoC Fazy 2 w kontenerze, demo
+#    przez proxy, TLS, WAF, limit żądań, izolacja sieci). Obrazy po bramkach trafiają do artefaktu images.
+# 3. publish (tylko push na main): ten sam artefakt (docker load) trafia do GHCR jako
+#    ghcr.io/l3x1cn/patchpoint/{api,proxy}:sha-<7 znaków SHA commita>, bez tagu latest. Tylko ten job ma
+#    packages: write i nie wykonuje kodu z repozytorium.
+# Joby wołają cele make, które działają też lokalnie. Akcje są przypięte po pełnym SHA commita z komentarzem
+# wersji (podbija je Dependabot); skanery działają z obrazów przypiętych po digeście (scripts/scan.sh), bez
+# akcji Trivy z Marketplace (CVE-2026-33634). Repozytorium jest prywatne bez GitHub Advanced Security, więc
+# SARIF trafia do artefaktów, nie do code scanning. Wartości z kontekstów GitHuba trafiają do poleceń
+# wyłącznie przez env, nigdy przez wyrażenia w treści run.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    # shell: bash = bash -eo pipefail; bez tego `| tee` ukrywa kod wyjścia smoke
+    shell: bash
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  UV_VERSION: "0.13.8"
+  IMAGE_REPO: ghcr.io/l3x1cn/patchpoint
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      UV_LOCKED: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Lint (ruff z regułami S)
+        run: make lint
+      - name: Typy (mypy --strict)
+        run: make typecheck
+      - name: Testy z pokryciem
+        run: make test
+
+  semgrep:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: scan
+        name: Bramka Semgrep
+        run: make semgrep
+      - if: ${{ !cancelled() && steps.scan.outcome != 'skipped' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: semgrep
+          path: reports/semgrep.*
+          overwrite: true
+
+  trivy-fs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: scan
+        name: Bramka Trivy (repozytorium)
+        run: make trivy-fs
+      - if: ${{ !cancelled() && steps.scan.outcome != 'skipped' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: trivy-fs
+          path: reports/trivy-fs.*
+          overwrite: true
+
+  ansible:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+      - name: ansible-lint i syntax-check
+        run: make ansible-lint
+
+  build:
+    needs: [quality, semgrep, trivy-fs, ansible]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: tags
+        name: Znaczniki obrazów
+        run: |
+          short="${GITHUB_SHA::7}"
+          echo "api=${IMAGE_REPO}/api:sha-${short}" >> "$GITHUB_OUTPUT"
+          echo "proxy=${IMAGE_REPO}/proxy:sha-${short}" >> "$GITHUB_OUTPUT"
+      - name: Budowa obrazów
+        env:
+          API_IMAGE: ${{ steps.tags.outputs.api }}
+          PROXY_IMAGE: ${{ steps.tags.outputs.proxy }}
+        run: make images API_IMAGE="$API_IMAGE" PROXY_IMAGE="$PROXY_IMAGE" IMAGE_REVISION="$GITHUB_SHA"
+      - name: Bramka Trivy (obrazy)
+        env:
+          API_IMAGE: ${{ steps.tags.outputs.api }}
+          PROXY_IMAGE: ${{ steps.tags.outputs.proxy }}
+        run: make trivy-images API_IMAGE="$API_IMAGE" PROXY_IMAGE="$PROXY_IMAGE"
+      - name: Smoke obrazów i stosu compose
+        env:
+          API_IMAGE: ${{ steps.tags.outputs.api }}
+          PROXY_IMAGE: ${{ steps.tags.outputs.proxy }}
+        run: |
+          mkdir -p reports
+          make stack-smoke API_IMAGE="$API_IMAGE" PROXY_IMAGE="$PROXY_IMAGE" 2>&1 | tee reports/stack-smoke.txt
+      - name: Eksport obrazów po bramkach
+        env:
+          API_IMAGE: ${{ steps.tags.outputs.api }}
+          PROXY_IMAGE: ${{ steps.tags.outputs.proxy }}
+        run: |
+          mkdir -p images
+          docker save "$API_IMAGE" -o images/api.tar
+          docker save "$PROXY_IMAGE" -o images/proxy.tar
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: images
+          path: images/
+          retention-days: 1
+          overwrite: true
+      - if: ${{ !cancelled() && steps.tags.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: build-reports
+          path: |
+            reports/trivy-image-*
+            reports/stack-smoke.txt
+          if-no-files-found: ignore
+          overwrite: true
+
+  publish:
+    needs: build
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      packages: write # publikacja obrazów w GHCR
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: images
+          path: images
+      - name: Publikacja w GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          docker load -i images/api.tar
+          docker load -i images/proxy.tar
+          short="${GITHUB_SHA::7}"
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker push "${IMAGE_REPO}/api:sha-${short}"
+          docker push "${IMAGE_REPO}/proxy:sha-${short}"
+          # Digesty wysłanych obrazów odczytane z rejestru: wdrożenie po digeście (patchpoint_api_digest,
+          # patchpoint_proxy_digest w roli Ansible) nie zależy od tego, na co wskazuje tag w momencie wdrożenia.
+          api_digest="$(docker buildx imagetools inspect "${IMAGE_REPO}/api:sha-${short}" --format '{{.Manifest.Digest}}')"
+          proxy_digest="$(docker buildx imagetools inspect "${IMAGE_REPO}/proxy:sha-${short}" --format '{{.Manifest.Digest}}')"
+          docker logout ghcr.io
+          for digest in "$api_digest" "$proxy_digest"; do
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "Nieprawidłowy digest obrazu: $digest" >&2; exit 1; }
+          done
+          {
+            echo "### Opublikowane obrazy (sha-${short})"
+            echo
+            echo "| Obraz | Tag | Digest |"
+            echo "|---|---|---|"
+            echo "| api | \`sha-${short}\` | \`${api_digest}\` |"
+            echo "| proxy | \`sha-${short}\` | \`${proxy_digest}\` |"
+            echo
+            echo "Wdrożenie po digeście: \`-e patchpoint_api_digest=${api_digest} -e patchpoint_proxy_digest=${proxy_digest}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

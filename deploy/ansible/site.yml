@@ -1,0 +1,10 @@
+---
+- name: Przygotuj serwer i wdróż PatchPoint
+  hosts: patchpoint
+  become: true
+  roles:
+    - role: base
+    - role: docker
+    - role: patchpoint
+      tags: [deploy]
+    - role: letsencrypt

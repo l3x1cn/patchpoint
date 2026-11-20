@@ -1,0 +1,5 @@
+# Limit żądań per adres IP klienta dla logowania i rejestracji: koszt Argon2id i blokowanie cudzych kont.
+# Wartości domyślne ustawia deploy/proxy/Dockerfile (PATCHPOINT_AUTH_RATE, PATCHPOINT_AUTH_BURST).
+limit_req_zone $binary_remote_addr zone=patchpoint_auth:10m rate=${PATCHPOINT_AUTH_RATE};
+limit_req_status 429;
+limit_req_log_level warn;
