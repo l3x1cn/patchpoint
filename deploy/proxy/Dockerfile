@@ -4,7 +4,7 @@
 # Kontekst to katalog główny repozytorium; plik kontekstu: deploy/proxy/Dockerfile.dockerignore.
 #   make images  (docker build -f deploy/proxy/Dockerfile -t patchpoint-proxy:local .)
 
-FROM owasp/modsecurity-crs:4.30.0-nginx-alpine-202611160811@sha256:27eba34c27e432ef0c8939f3695b5483952247ae298fee881e02ca96fb44563a AS ui
+FROM owasp/modsecurity-crs:4-nginx-alpine-202611090911@sha256:b8d5bbf88c643800e31b248993858c335e4907ba0ee473d0c81c5726fb2c1bdc AS ui
 USER root
 WORKDIR /ui
 # Pliki w repozytorium mogą mieć tryb 0600; użytkownik nginx (UID 101) musi móc je czytać.
@@ -17,7 +17,7 @@ RUN sed -i 's|^const API_BASE_URL = "http://patchpoint.localhost:8000";$|const A
     && grep -qF "connect-src 'self';" index.html \
     && ! grep -qF 'patchpoint.localhost:8000' app.js index.html
 
-FROM owasp/modsecurity-crs:4.30.0-nginx-alpine-202611160811@sha256:27eba34c27e432ef0c8939f3695b5483952247ae298fee881e02ca96fb44563a
+FROM owasp/modsecurity-crs:4-nginx-alpine-202611090911@sha256:b8d5bbf88c643800e31b248993858c335e4907ba0ee473d0c81c5726fb2c1bdc
 # Wartości domyślne (produkcyjne); compose.yaml nadpisuje te zależne od środowiska.
 # SSL_OCSP_STAPLING=off: certyfikat deweloperski nie ma adresu OCSP; dla Let's Encrypt ustawienie jest
 # bezpieczne niezależnie od tego, czy certyfikat ma adres OCSP.
