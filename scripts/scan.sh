@@ -4,6 +4,7 @@
 #   scripts/scan.sh semgrep               SAST (Semgrep CE, zestawy reguł z rejestru); kod 1 przy znalezisku
 #   scripts/scan.sh fs                    Trivy na drzewie repozytorium: podatności zależności (backend/uv.lock),
 #                                         sekrety i konfiguracja Dockerfile; kod 1 przy HIGH lub CRITICAL
+#                                         z dostępną poprawką
 #   scripts/scan.sh image <nazwa> <obraz> Trivy na obrazie z lokalnego Dockera; kod 1 przy HIGH lub CRITICAL
 #                                         z dostępną poprawką
 # Skanery działają z obrazów przypiętych po digeście: bez instalacji i bez aquasecurity/trivy-action
@@ -17,7 +18,7 @@ cd "$(dirname "$0")/.."
 SEMGREP_IMAGE="semgrep/semgrep:1.185.0@sha256:67518c174185a2043fdbed16c70631b79209499b3671178e7194379b48295a0d"
 TRIVY_IMAGE="aquasec/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb"
 SEMGREP_CONFIGS=(p/python p/javascript p/dockerfile p/docker-compose p/github-actions p/owasp-top-ten)
-TRIVY_SKIP_DIRS=".git,.av,reports,backend/.venv,backend/.mypy_cache,backend/.pytest_cache,backend/.ruff_cache,deploy/proxy/dev-tls,deploy/ansible/.ansible"
+TRIVY_SKIP_DIRS=".git,.av,reports,backend/.venv,backend/.mypy_cache,backend/.pytest_cache,backend/.ruff_cache,deploy/proxy/dev-tls,deploy/ansible/.ansible,deploy/ansible/tools/.venv"
 
 REPORTS="$PWD/reports"
 TRIVY_CACHE="${TRIVY_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/patchpoint-trivy}"

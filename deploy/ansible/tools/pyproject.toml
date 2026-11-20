@@ -1,0 +1,11 @@
+# Narzędzia Ansible dla make ansible-lint (uv run --locked --project deploy/ansible/tools): dokładne wersje
+# bezpośrednie tutaj, a wszystkie zależności pośrednie z hashami w uv.lock. Aktualizacje: Dependabot (uv).
+[project]
+name = "patchpoint-ansible-tools"
+version = "0.0.0"
+description = "Zablokowane narzędzia Ansible (ansible-core i ansible-lint) dla deploy/ansible"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "ansible-core==2.19.15",
+    "ansible-lint==26.11.0",
+]

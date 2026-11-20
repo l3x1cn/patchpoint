@@ -23,9 +23,9 @@ server {
     }
 
     if ($patchpoint_redirect_to_tls = on) {
-        # Host przekierowania to ten sam host, którego przeglądarka użyła w żądaniu; nagłówka Host nie da się
-        # ustawić z cudzej witryny, a stała nazwa zepsułaby wejście przez adres IP (smoke, lokalny stos).
-        return 301 https://$host:${SSL_REDIRECT_PORT}$request_uri; # nosemgrep: generic.nginx.security.request-host-used.request-host-used
+        # Przekierowanie idzie na stałą nazwę serwera, a nie na nagłówek Host od klienta (tak samo jak w
+        # includes/patchpoint-proxy.conf); żądanie przez adres IP albo inną nazwę trafia na nazwę z certyfikatu.
+        return 301 https://${SERVER_NAME}:${SSL_REDIRECT_PORT}$request_uri;
     }
 
     include includes/patchpoint-app.conf;

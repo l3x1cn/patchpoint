@@ -6,7 +6,7 @@
 # Obraz proxy (nginx 1.30.6-r1, owasp/modsecurity-crs:4.30.0-nginx-alpine-202611160811): poprawka jest w
 # nginx 1.30.7-r0, ale najnowszy tag obrazu z dnia 2026-11-19 jeszcze jej nie zawiera, a apk upgrade jest
 # wykluczony (moduł ModSecurity jest zbudowany dla konkretnej wersji nginx). Po wydaniu nowszego tagu: podbić
-# obraz (tabela wersji w planie Fazy 3) i usunąć wpisy z tego bloku.
+# obraz (tabela „Przypięte wersje” w docs/faza-3-ops/README.md) i usunąć wpisy z tego bloku.
 
 # nginx: CVE-2026-113425 dotyczy nginx jako proxy poczty; konfiguracja proxy nie ma bloków mail ani stream.
 CVE-2026-113425 exp:2026-12-19

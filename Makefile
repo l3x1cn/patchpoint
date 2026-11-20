@@ -9,9 +9,9 @@ IMAGE_SOURCE := https://github.com/l3x1cn/patchpoint
 IMAGE_REVISION ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 ANSIBLE_DIR := deploy/ansible
 ANSIBLE_PYTHON ?= 3.13
-ANSIBLE_CORE_VERSION ?= 2.19.15
-ANSIBLE_LINT_VERSION ?= 26.11.0
-UVX_ANSIBLE := uvx --python $(ANSIBLE_PYTHON) --from ansible-core==$(ANSIBLE_CORE_VERSION)
+# Wersje ansible-core i ansible-lint: deploy/ansible/tools/pyproject.toml, zależności pośrednie: uv.lock.
+# Ścieżka --project jest względna wobec katalogu deploy/ansible, z którego działają polecenia celu.
+UV_ANSIBLE := uv run --locked --python $(ANSIBLE_PYTHON) --project tools
 
 .PHONY: install run test lint format typecheck frontend demo security-check images dev-cert semgrep trivy-fs trivy-images scan stack-up stack-down stack-smoke ansible-lint
 
@@ -71,6 +71,6 @@ stack-smoke:
 	PATCHPOINT_API_IMAGE=$(API_IMAGE) PATCHPOINT_PROXY_IMAGE=$(PROXY_IMAGE) ./scripts/stack_smoke.sh
 
 ansible-lint:
-	cd $(ANSIBLE_DIR) && uvx --python $(ANSIBLE_PYTHON) --from ansible-lint==$(ANSIBLE_LINT_VERSION) --with ansible-core==$(ANSIBLE_CORE_VERSION) ansible-lint
-	cd $(ANSIBLE_DIR) && $(UVX_ANSIBLE) ansible-galaxy collection install -r requirements.yml -p .ansible/collections
-	cd $(ANSIBLE_DIR) && ANSIBLE_COLLECTIONS_PATH=.ansible/collections $(UVX_ANSIBLE) ansible-playbook --syntax-check -i inventory.example.yml site.yml
+	cd $(ANSIBLE_DIR) && $(UV_ANSIBLE) ansible-lint
+	cd $(ANSIBLE_DIR) && $(UV_ANSIBLE) ansible-galaxy collection install -r requirements.yml -p .ansible/collections
+	cd $(ANSIBLE_DIR) && ANSIBLE_COLLECTIONS_PATH=.ansible/collections $(UV_ANSIBLE) ansible-playbook --syntax-check -i inventory.example.yml site.yml

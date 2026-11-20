@@ -11,7 +11,7 @@ version = 1
 #   the application (local default PATCHPOINT_TLS_REDIRECT=off); HTTPS on 8443 uses the self-signed
 #   certificate from `make dev-cert` (deploy/proxy/dev-tls/fullchain.pem, SAN patchpoint.localhost and
 #   127.0.0.1), so curl needs `--cacert deploy/proxy/dev-tls/fullchain.pem`. On `stack` the WAF answers SQL
-#   injection and XSS payloads with 403 {"detail":"Request blocked by the web application firewall"} before
+#   injection and XSS payloads with 403 {"detail":"Request blocked by the proxy"} before
 #   they reach the API, and POST /api/auth/login and /api/auth/register are limited per client IP
 #   (10 per minute, burst 5; 429 {"detail":"Too many requests, try again later"}). Payload tests of the API
 #   itself belong on `backend` and `ui`.

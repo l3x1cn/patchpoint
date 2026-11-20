@@ -129,7 +129,8 @@ else
 fi
 echo "     $poc_summary"
 
-if [[ "$(grep -cF "$DEMO_PASSWORD" "$WORK/api.log" || true)" -eq 0 ]]; then
+# Wzorzec idzie do grep przez deskryptor pliku (printf jest poleceniem wbudowanym), nie przez argumenty procesu.
+if [[ "$(grep -cFf <(printf '%s\n' "$DEMO_PASSWORD") "$WORK/api.log" || true)" -eq 0 ]]; then
   ok "log kontenera API nie zawiera hasła demo"
 else
   bad "log kontenera API zawiera hasło demo"
@@ -203,7 +204,7 @@ cookie_header() {
   (umask 077 && printf 'Cookie: %s=%s\n' "$2" "$3" >"$1")
 }
 
-WAF_DETAIL="Request blocked by the web application firewall"
+BLOCK_DETAIL="Request blocked by the proxy"
 RL_DETAIL="Too many requests, try again later"
 
 # 1. UI: nagłówki bezpieczeństwa
@@ -324,20 +325,28 @@ fi
 
 # 8. WAF: SQL injection
 req GET "$B/api/tickets" -G --data-urlencode "search=1' OR '1'='1" -H "@$WORK/cookie.host"
-if [[ "$STATUS" == "403" ]] && detail_is "$WAF_DETAIL"; then
+if [[ "$STATUS" == "403" ]] && detail_is "$BLOCK_DETAIL"; then
   ok "WAF blokuje SQL injection w parametrze search (403, JSON)"
 else
-  bad "WAF, SQL injection: status $STATUS zamiast 403 z komunikatem WAF"
+  bad "WAF, SQL injection: status $STATUS zamiast 403 z komunikatem proxy"
 fi
 
 # 9. WAF: XSS
-payload=$(jq -nc --arg u "smoke.xss.$SFX" --arg p "Smoke-Xss-Password-$SFX" \
-  '{username: $u, password: $p, full_name: "<script>alert(1)</script>"}')
+payload=$(printf '%s' "Smoke-Xss-Password-$SFX" \
+  | jq -Rsc --arg u "smoke.xss.$SFX" '{username: $u, password: ., full_name: "<script>alert(1)</script>"}')
 post_json "$B/api/auth/register" "$payload"
-if [[ "$STATUS" == "403" ]] && detail_is "$WAF_DETAIL"; then
+if [[ "$STATUS" == "403" ]] && detail_is "$BLOCK_DETAIL"; then
   ok "WAF blokuje XSS w polu full_name (403, JSON)"
 else
-  bad "WAF, XSS: status $STATUS zamiast 403 z komunikatem WAF"
+  bad "WAF, XSS: status $STATUS zamiast 403 z komunikatem proxy"
+fi
+
+# 9b. 403 spoza WAF: /metrics/nginx (location_common.conf obrazu) z zewnątrz dostaje ten sam neutralny komunikat
+req GET "$B/metrics/nginx"
+if [[ "$STATUS" == "403" ]] && detail_is "$BLOCK_DETAIL"; then
+  ok "odmowa dostępu do /metrics/nginx: 403 z neutralnym komunikatem proxy"
+else
+  bad "/metrics/nginx z zewnątrz: status $STATUS zamiast 403 z komunikatem proxy"
 fi
 
 # 10. Audit log WAF: reguły SQLi i XSS są zapisane, a sekretów w nim nie ma
@@ -351,8 +360,11 @@ else
   bad "audit log WAF nie zawiera reguł 942xxx i 941xxx"
 fi
 leaks=0
+# Pusty sekret (np. TOKEN po nieudanym logowaniu, które już zwiększyło FAILURES) pasowałby do każdej linii
+# logu i dałby fałszywy wyciek, więc go pomijamy; guard musi poprzedzać grep.
 for secret in "$PW_STRONG" "$DEMO_PASSWORD" "$TOKEN"; do
-  if grep -qF -- "$secret" "$WORK/proxy.log"; then
+  [[ -n "$secret" ]] || continue
+  if grep -qFf <(printf '%s\n' "$secret") "$WORK/proxy.log"; then
     leaks=$((leaks + 1))
   fi
 done

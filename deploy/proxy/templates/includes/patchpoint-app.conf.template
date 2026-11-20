@@ -3,9 +3,11 @@ root /usr/share/nginx/html;
 index index.html;
 client_max_body_size 128k;
 
-# Odpowiedzi generowane przez nginx (blokada WAF, limit żądań) w formacie API: {"detail": "..."}.
+# Odpowiedzi generowane przez nginx w formacie API: {"detail": "..."}. Każde 403 z nginx (blokada WAF,
+# odmowa dostępu do /metrics/nginx z location_common.conf) dostaje neutralny komunikat, bo nie każde
+# pochodzi z ModSecurity; 429 to limit żądań.
 # Odpowiedzi samego API przechodzą bez zmian (proxy_intercept_errors jest wyłączone).
-error_page 403 = @patchpoint_waf_blocked;
+error_page 403 = @patchpoint_blocked;
 error_page 429 = @patchpoint_rate_limited;
 
 location / {
@@ -33,10 +35,10 @@ location = /api/auth/register {
     include includes/patchpoint-proxy.conf;
 }
 
-location @patchpoint_waf_blocked {
+location @patchpoint_blocked {
     default_type application/json;
     add_header Cache-Control "no-store" always;
-    return 403 '{"detail":"Request blocked by the web application firewall"}';
+    return 403 '{"detail":"Request blocked by the proxy"}';
 }
 
 location @patchpoint_rate_limited {

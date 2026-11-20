@@ -1,6 +1,8 @@
 ---
 letsencrypt_domain: ""
 letsencrypt_email: ""
+# Wartości zapasowe; w tym projekcie nadpisuje je group_vars/patchpoint/vars.yml (z patchpoint_dir i
+# patchpoint_proxy_uid), żeby były zgodne z rolą patchpoint.
 letsencrypt_webroot: /opt/patchpoint/acme
 letsencrypt_tls_dir: /opt/patchpoint/tls
 letsencrypt_compose_dir: /opt/patchpoint
