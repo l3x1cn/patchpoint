@@ -1,0 +1,550 @@
+# OPS-02, OPS-03, OPS-04 — stack patchpoint-final — 2026-11-27T23:50:56+01:00
+# Head: a8e0e83b850f29b2130f7d1e62a5e2a72e1bba3c
+# Stack: compose project patchpoint-final, local mode (HTTP 127.0.0.1:28080, HTTPS 127.0.0.1:28443), images patchpoint-api:local and patchpoint-proxy:local, subnet 10.253.0.0/24
+# Convention: $RUN = private temp directory, $SFX = e39a69, H=http://patchpoint.localhost:28080, S=https://patchpoint.localhost:28443; passwords and cookie jars live only under $RUN
+# FE-01–FE-06 (fe-stack.md) ran between the stack start and OPS-02 on this same stack; it was not restarted in between.
+
+## Setup — stack start
+
+$ export COMPOSE_PROJECT_NAME=patchpoint-final PATCHPOINT_API_IMAGE=patchpoint-api:local PATCHPOINT_PROXY_IMAGE=patchpoint-proxy:local
+$ export PATCHPOINT_HTTP_BIND=127.0.0.1:28080 PATCHPOINT_HTTPS_BIND=127.0.0.1:28443 PATCHPOINT_HTTPS_PUBLIC_PORT=28443
+$ export PATCHPOINT_PUBLIC_ORIGINS='["http://patchpoint.localhost:28080","https://patchpoint.localhost:28443"]'
+$ export PATCHPOINT_BACKEND_SUBNET=10.253.0.0/24 PATCHPOINT_PROXY_BACKEND_IP=10.253.0.10
+$ export PATCHPOINT_API_ENV_FILE="$RUN/stack-api.env"
+# stack env file "$RUN/stack-api.env" written as in Setup: the seed flag and the run's demo password variable (value from $DEMO_PW, not printed here)
+$ make dev-cert 2>&1 | tail -5; docker compose up -d --wait --wait-timeout 180 2>&1 | tail -15; docker compose ps
+./scripts/dev_cert.sh deploy/proxy/dev-tls
+Certyfikat deweloperski w deploy/proxy/dev-tls jest ważny.
+ Network patchpoint-final_backend Created 
+ Container patchpoint-final-api-1 Creating 
+ … [8 lines omitted]
+ Container patchpoint-final-api-1 Healthy 
+ Container patchpoint-final-proxy-1 Healthy 
+NAME                       IMAGE                    COMMAND                  SERVICE   CREATED         STATUS                   PORTS
+patchpoint-final-api-1     patchpoint-api:local     "uvicorn app.main:ap…"   api       6 seconds ago   Up 5 seconds (healthy)   8000/tcp
+patchpoint-final-proxy-1   patchpoint-proxy:local   "/docker-entrypoint.…"   proxy     6 seconds ago   Up 2 seconds (healthy)   127.0.0.1:28080->8080/tcp, 127.0.0.1:28443->8443/tcp
+[exit code: 0]   (of the last command, `docker compose ps`; the earlier two were piped through `tail`)
+
+## OPS-02 — container hardening of the running stack
+
+$ docker inspect patchpoint-final-api-1 -f 'api: User={{.Config.User}} ReadonlyRootfs={{.HostConfig.ReadonlyRootfs}} CapDrop={{json .HostConfig.CapDrop}} SecurityOpt={{json .HostConfig.SecurityOpt}}'
+api: User=10001:10001 ReadonlyRootfs=true CapDrop=["ALL"] SecurityOpt=["no-new-privileges:true"]
+[exit code: 0]
+
+$ docker inspect patchpoint-final-api-1 -f 'api: Memory={{.HostConfig.Memory}} NanoCpus={{.HostConfig.NanoCpus}} PidsLimit={{.HostConfig.PidsLimit}} RestartPolicy={{.HostConfig.RestartPolicy.Name}}'
+api: Memory=1073741824 NanoCpus=1000000000 PidsLimit=256 RestartPolicy=unless-stopped
+[exit code: 0]
+
+$ docker inspect patchpoint-final-api-1 -f 'api: LogConfig={{json .HostConfig.LogConfig}}'
+api: LogConfig={"Type":"json-file","Config":{"max-file":"5","max-size":"10m"}}
+[exit code: 0]
+
+$ docker inspect patchpoint-final-api-1 -f 'api: Networks={{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}'
+api: Networks=patchpoint-final_backend 
+[exit code: 0]
+
+$ docker inspect patchpoint-final-api-1 -f 'api: PortBindings={{json .HostConfig.PortBindings}}'
+api: PortBindings={}
+[exit code: 0]
+
+$ docker inspect patchpoint-final-proxy-1 -f 'proxy: User={{.Config.User}} ReadonlyRootfs={{.HostConfig.ReadonlyRootfs}} CapDrop={{json .HostConfig.CapDrop}} SecurityOpt={{json .HostConfig.SecurityOpt}}'
+proxy: User=nginx ReadonlyRootfs=false CapDrop=["ALL"] SecurityOpt=["no-new-privileges:true"]
+[exit code: 0]
+
+$ docker inspect patchpoint-final-proxy-1 -f 'proxy: Memory={{.HostConfig.Memory}} NanoCpus={{.HostConfig.NanoCpus}} PidsLimit={{.HostConfig.PidsLimit}} RestartPolicy={{.HostConfig.RestartPolicy.Name}}'
+proxy: Memory=268435456 NanoCpus=500000000 PidsLimit=128 RestartPolicy=unless-stopped
+[exit code: 0]
+
+$ docker inspect patchpoint-final-proxy-1 -f 'proxy: LogConfig={{json .HostConfig.LogConfig}}'
+proxy: LogConfig={"Type":"json-file","Config":{"max-file":"5","max-size":"10m"}}
+[exit code: 0]
+
+$ docker inspect patchpoint-final-proxy-1 -f 'proxy: Networks={{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}'
+proxy: Networks=patchpoint-final_backend patchpoint-final_edge 
+[exit code: 0]
+
+$ docker inspect patchpoint-final-proxy-1 -f 'proxy: PortBindings={{json .HostConfig.PortBindings}}'
+proxy: PortBindings={"8080/tcp":[{"HostIp":"127.0.0.1","HostPort":"28080"}],"8443/tcp":[{"HostIp":"127.0.0.1","HostPort":"28443"}]}
+[exit code: 0]
+
+$ docker compose exec -T proxy id -u
+101
+[exit code: 0]
+
+$ docker compose exec -T proxy id -un
+nginx
+[exit code: 0]
+
+$ docker network inspect patchpoint-final_backend -f '{{.Internal}}'
+true
+[exit code: 0]
+
+$ docker network inspect patchpoint-final_edge -f '{{.Internal}}'
+false
+[exit code: 0]
+
+$ docker compose port api 8000
+:0
+[exit code: 0]
+
+$ docker compose port proxy 8080
+127.0.0.1:28080
+[exit code: 0]
+
+$ docker compose port proxy 8443
+127.0.0.1:28443
+[exit code: 0]
+
+## OPS-03 — TLS protocols and ciphers (HTTPS on 127.0.0.1:28443)
+
+$ openssl s_client -connect 127.0.0.1:28443 -servername patchpoint.localhost -CAfile deploy/proxy/dev-tls/fullchain.pem -tls1_3 </dev/null
+CONNECTED(00000003)
+Verification: OK
+New, TLSv1.3, Cipher is TLS_AES_256_GCM_SHA384
+Protocol: TLSv1.3
+Verify return code: 0 (ok)
+… [42 lines omitted]
+[exit code: 0]
+
+$ openssl s_client -connect 127.0.0.1:28443 -servername patchpoint.localhost -CAfile deploy/proxy/dev-tls/fullchain.pem -tls1_2 -cipher ECDHE-ECDSA-AES128-GCM-SHA256 </dev/null
+CONNECTED(00000003)
+Verification: OK
+New, TLSv1.2, Cipher is ECDHE-ECDSA-AES128-GCM-SHA256
+Protocol: TLSv1.2
+    Protocol  : TLSv1.2
+    Cipher    : ECDHE-ECDSA-AES128-GCM-SHA256
+    Verify return code: 0 (ok)
+… [51 lines omitted]
+[exit code: 0]
+
+$ openssl s_client -connect 127.0.0.1:28443 -servername patchpoint.localhost -CAfile deploy/proxy/dev-tls/fullchain.pem -tls1_2 -cipher ECDHE-ECDSA-AES128-SHA </dev/null
+80704225217F0000:error:0A000410:SSL routines:ssl3_read_bytes:tls alert handshake failure:ssl/record/rec_layer_s3.c:910:SSL alert number 40
+CONNECTED(00000003)
+no peer certificate available
+Verification: OK
+New, (NONE), Cipher is (NONE)
+Protocol: TLSv1.2
+    Protocol  : TLSv1.2
+    Cipher    : 0000
+    Verify return code: 0 (ok)
+… [24 lines omitted]
+[exit code: 1]
+
+$ openssl s_client -connect 127.0.0.1:28443 -servername patchpoint.localhost -CAfile deploy/proxy/dev-tls/fullchain.pem -tls1_1 -cipher 'DEFAULT:@SECLEVEL=0' </dev/null
+80701C06697F0000:error:0A00042E:SSL routines:ssl3_read_bytes:tlsv1 alert protocol version:ssl/record/rec_layer_s3.c:910:SSL alert number 70
+CONNECTED(00000003)
+no peer certificate available
+Verification: OK
+New, (NONE), Cipher is (NONE)
+Protocol: TLSv1.1
+    Protocol  : TLSv1.1
+    Cipher    : 0000
+    Verify return code: 0 (ok)
+… [24 lines omitted]
+[exit code: 1]
+
+$ curl -s --noproxy '*' -o /dev/null https://patchpoint.localhost:28443/api/health
+[exit code: 60]
+
+$ curl -s --noproxy '*' --cacert deploy/proxy/dev-tls/fullchain.pem -o /dev/null -w '%{http_code} %{ssl_verify_result}\n' https://patchpoint.localhost:28443/api/health
+200 0
+[exit code: 0]
+
+## OPS-04 — security events in the logs (BASE=$H = http://patchpoint.localhost:28080)
+# FE-06 ended at 23:56:29; step 1 starts after >= 65 s. Every authentication request through the proxy is preceded by sleep 7 (pacing), except step 15.
+
+$ new_user qa.final.$SFX.log1; new_user qa.final.$SFX.log2; new_user qa.final.$SFX.ghost; new_user qa.final.$SFX.xss; ls $RUN | grep -cE "^(pw|reg|login)\.qa\.final\.$SFX\.(log1|log2|ghost|xss)"
+12
+[exit code: 0]
+
+$ printf %s Wrong-Password-12345 | jq -Rsc --arg u qa.final.$SFX.log1 "{username: \$u, password: .}" > $RUN/wrong.log1.json; wc -c < $RUN/wrong.log1.json
+70
+[exit code: 0]
+
+$ jq -c ".full_name = \"<script>alert(1)</script>\"" $RUN/reg.qa.final.$SFX.xss.json > $RUN/reg.xss-script.json; jq -r "keys | join(\",\")" $RUN/reg.xss-script.json
+department,full_name,password,username
+[exit code: 0]
+
+$ printf "%s" "{\"title\":\"Audit probe $SFX\",\"description\":\"Created for the log checks\",\"category\":\"other\",\"priority\":\"low\"}" > $RUN/ticket.log2.json; printf "%s" "{\"status\":\"in_progress\"}" > $RUN/patch.inprogress.json; printf "%s" "{\"status\":\"closed\"}" > $RUN/patch.closed.json; printf "%s" "{\"title\":\"\"}" > $RUN/ticket.empty.json; ls $RUN/ticket.log2.json $RUN/patch.inprogress.json $RUN/patch.closed.json $RUN/ticket.empty.json
+/tmp/pp-final.ZtQyGO/patch.closed.json
+/tmp/pp-final.ZtQyGO/patch.inprogress.json
+/tmp/pp-final.ZtQyGO/ticket.empty.json
+/tmp/pp-final.ZtQyGO/ticket.log2.json
+[exit code: 0]
+
+$ echo "-- step 1"; sleep 7; req POST /api/auth/register --data-binary @$RUN/reg.qa.final.$SFX.log1.json; jq -c . $RUN/last.body | cut -c1-200
+-- step 1
+201 0.085167
+{"id":5,"username":"qa.final.e39a69.log1","full_name":"QA Final","department":"QA","role":"employee","created_at":"2026-11-27T22:57:43Z"}
+[exit code: 0]
+
+$ echo "-- step 2"; sleep 7; req POST /api/auth/register --data-binary @$RUN/reg.qa.final.$SFX.log1.json; jq -c . $RUN/last.body | cut -c1-200
+-- step 2
+409 0.070302
+{"detail":"Username is already taken"}
+[exit code: 0]
+
+$ echo "-- step 3 (wrong login 1 of 5)"; sleep 7; req POST /api/auth/login --data-binary @$RUN/wrong.log1.json; jq -c . $RUN/last.body | cut -c1-200
+-- step 3 (wrong login 1 of 5)
+401 0.074657
+{"detail":"Invalid username or password"}
+[exit code: 0]
+
+$ echo "-- step 3 (wrong login 2 of 5)"; sleep 7; req POST /api/auth/login --data-binary @$RUN/wrong.log1.json; jq -c . $RUN/last.body | cut -c1-200
+-- step 3 (wrong login 2 of 5)
+401 0.076097
+{"detail":"Invalid username or password"}
+[exit code: 0]
+
+$ echo "-- step 3 (wrong login 3 of 5)"; sleep 7; req POST /api/auth/login --data-binary @$RUN/wrong.log1.json; jq -c . $RUN/last.body | cut -c1-200
+-- step 3 (wrong login 3 of 5)
+401 0.073547
+{"detail":"Invalid username or password"}
+[exit code: 0]
+
+$ echo "-- step 3 (wrong login 4 of 5)"; sleep 7; req POST /api/auth/login --data-binary @$RUN/wrong.log1.json; jq -c . $RUN/last.body | cut -c1-200
+-- step 3 (wrong login 4 of 5)
+401 0.077881
+{"detail":"Invalid username or password"}
+[exit code: 0]
+
+$ echo "-- step 3 (wrong login 5 of 5)"; sleep 7; req POST /api/auth/login --data-binary @$RUN/wrong.log1.json; jq -c . $RUN/last.body | cut -c1-200
+-- step 3 (wrong login 5 of 5)
+401 0.075379
+{"detail":"Invalid username or password"}
+[exit code: 0]
+
+$ echo "-- step 4 (sixth wrong login)"; sleep 7; req POST /api/auth/login --data-binary @$RUN/wrong.log1.json -D $RUN/step4.hdr; jq -c . $RUN/last.body | cut -c1-200; tr -d "\r" < $RUN/step4.hdr | grep -i "^retry-after"
+-- step 4 (sixth wrong login)
+429 0.005224
+{"detail":"Too many failed login attempts. Try again later."}
+retry-after: 900
+[exit code: 0]
+
+$ echo "-- step 5 (unregistered ghost)"; sleep 7; req POST /api/auth/login --data-binary @$RUN/login.qa.final.$SFX.ghost.json; jq -c . $RUN/last.body | cut -c1-200
+-- step 5 (unregistered ghost)
+401 0.057721
+{"detail":"Invalid username or password"}
+[exit code: 0]
+
+$ echo "-- step 6a (register log2)"; sleep 7; req POST /api/auth/register --data-binary @$RUN/reg.qa.final.$SFX.log2.json; jq -c . $RUN/last.body | cut -c1-200
+-- step 6a (register log2)
+201 0.083470
+{"id":6,"username":"qa.final.e39a69.log2","full_name":"QA Final","department":"QA","role":"employee","created_at":"2026-11-27T22:58:56Z"}
+[exit code: 0]
+
+$ echo "-- step 6b (sign in log2)"; sleep 7; req POST /api/auth/login --data-binary @$RUN/login.qa.final.$SFX.log2.json -c $RUN/log2.jar; jq -c . $RUN/last.body | cut -c1-200
+-- step 6b (sign in log2)
+200 0.077389
+{"user":{"id":6,"username":"qa.final.e39a69.log2","full_name":"QA Final","department":"QA","role":"employee","created_at":"2026-11-27T22:58:56Z"}}
+[exit code: 0]
+
+$ echo "-- step 7 (forged cookie)"; req GET /api/auth/me -H "Cookie: session=forged-$SFX"; jq -c . $RUN/last.body
+-- step 7 (forged cookie)
+401 0.004017
+{"detail":"Not authenticated"}
+[exit code: 0]
+
+$ echo "-- step 8 (log2: GET /api/tickets/1)"; req GET /api/tickets/1 -b $RUN/log2.jar; jq -c . $RUN/last.body
+-- step 8 (log2: GET /api/tickets/1)
+401 0.003521
+{"detail":"Not authenticated"}
+[exit code: 0]
+
+$ echo "-- step 9 (log2: PATCH /api/tickets/1 closed)"; req PATCH /api/tickets/1 -b $RUN/log2.jar --data-binary @$RUN/patch.closed.json; jq -c . $RUN/last.body
+-- step 9 (log2: PATCH /api/tickets/1 closed)
+401 0.004028
+{"detail":"Not authenticated"}
+[exit code: 0]
+
+# NOTE (steps 6b, 8 and 9 above): the login in step 6b returned 200, but steps 8 and 9 (first attempt, with the cookie jar) got 401 as if no cookie had been sent.
+# [INFERENCE] The jar was empty: no command in this file lists the jar (it was deleted with $RUN), so this is inferred from the two 401s and from the Secure attribute shown by the diagnostic below.
+# Cause, read from the Set-Cookie attributes below (value masked): the cookie is `Secure`, and curl is inferred not to keep a Secure cookie received over http:// [INFERENCE: not shown by a command here].
+# (Chromium accepts it on http://*.localhost, so the FE scenarios were not affected.) The diagnostic below is one extra login of log2, run outside the numbered steps.
+
+$ curl -s --noproxy '*' -X POST -H 'Content-Type: application/json' --data-binary @$RUN/login.qa.final.$SFX.log2.json -D "$RUN/h.tmp" -o /dev/null -w '%{http_code}\n' http://patchpoint.localhost:28080/api/auth/login; tr -d '\r' < "$RUN/h.tmp" | grep -i '^set-cookie' | sed -E 's/(session=)[^;]*/\1<masked>/'
+200
+… [1 line omitted: the Set-Cookie header line; its attributes were HttpOnly, Max-Age=28800, Path=/, SameSite=strict, Secure; value not recorded]
+[exit code: 0]
+
+# Workaround for the rest of OPS-04 (same requests, same BASE=$H): `hlogin` keeps the session cookie in a header file under $RUN, passed to curl as `-H @file`
+# (never in argv). Definition:
+#   hlogin() { # hlogin LOGINFILE COOKIEFILE
+#     curl -s --noproxy '*' -m 60 -X POST -H 'Content-Type: application/json' --data-binary @"$1" -D "$RUN/hl.hdr" -o "$RUN/last.body" -w '%{http_code} %{time_total}\n' "$BASE/api/auth/login"
+#     sed -n 's/^[Ss]et-[Cc]ookie: \(session=[^;]*\).*/Cookie: \1/p' "$RUN/hl.hdr" | tr -d '\r' > "$2"
+#     sed 's/^Cookie: session=//' "$2" >> "$RUN/secrets.txt"
+#   }
+
+$ echo "-- step 6b (sign in log2, repeated with hlogin)"; sleep 7; hlogin $RUN/login.qa.final.$SFX.log2.json $RUN/log2.cookie; jq -c . $RUN/last.body | cut -c1-200; test -s $RUN/log2.cookie; echo "cookie header file non-empty: $?"
+-- step 6b (sign in log2, repeated with hlogin)
+200 0.118566
+{"user":{"id":6,"username":"qa.final.e39a69.log2","full_name":"QA Final","department":"QA","role":"employee","created_at":"2026-11-27T22:58:56Z"}}
+cookie header file non-empty: 0
+[exit code: 0]
+
+$ echo "-- step 8 (log2: GET /api/tickets/1, repeated)"; req GET /api/tickets/1 -H @$RUN/log2.cookie; jq -c . $RUN/last.body
+-- step 8 (log2: GET /api/tickets/1, repeated)
+404 0.005909
+{"detail":"Ticket not found"}
+[exit code: 0]
+
+$ echo "-- step 9 (log2: PATCH /api/tickets/1 closed, repeated)"; req PATCH /api/tickets/1 -H @$RUN/log2.cookie --data-binary @$RUN/patch.closed.json; jq -c . $RUN/last.body
+-- step 9 (log2: PATCH /api/tickets/1 closed, repeated)
+403 0.004344
+{"detail":"Helpdesk agent role required"}
+[exit code: 0]
+
+$ echo "-- step 10a (log2 creates a ticket)"; req POST /api/tickets -H @$RUN/log2.cookie --data-binary @$RUN/ticket.log2.json; jq -c "{id, status, title}" $RUN/last.body; jq -r .id $RUN/last.body > $RUN/log2.ticket
+-- step 10a (log2 creates a ticket)
+201 0.029486
+{"id":5,"status":"open","title":"Audit probe e39a69"}
+[exit code: 0]
+
+$ echo "-- step 10b (helpdesk signs in)"; sleep 7; hlogin $RUN/login.helpdesk.json $RUN/helpdesk.cookie; jq -c "{username: .user.username, role: .user.role}" $RUN/last.body
+-- step 10b (helpdesk signs in)
+200 0.073879
+{"username":"helpdesk","role":"agent"}
+[exit code: 0]
+
+$ echo "-- step 10c (helpdesk PATCH the ticket to in_progress)"; req PATCH /api/tickets/$(cat $RUN/log2.ticket) -H @$RUN/helpdesk.cookie --data-binary @$RUN/patch.inprogress.json; jq -c "{id, status}" $RUN/last.body
+-- step 10c (helpdesk PATCH the ticket to in_progress)
+200 0.014911
+{"id":5,"status":"in_progress"}
+[exit code: 0]
+
+$ echo "-- step 11 (log2: POST /api/tickets with an empty title)"; req POST /api/tickets -H @$RUN/log2.cookie --data-binary @$RUN/ticket.empty.json; jq -c . $RUN/last.body | cut -c1-300
+-- step 11 (log2: POST /api/tickets with an empty title)
+422 0.015267
+{"detail":[{"type":"string_too_short","loc":["body","title"],"msg":"String should have at least 1 character","input":"","ctx":{"min_length":1}},{"type":"missing","loc":["body","description"],"msg":"Field required","input":{"title":""}},{"type":"missing","loc":["body","category"],"msg":"Field require
+[exit code: 0]
+
+$ echo "-- step 12 (log2 logs out)"; req POST /api/auth/logout -H @$RUN/log2.cookie; jq -c . $RUN/last.body
+-- step 12 (log2 logs out)
+200 0.015546
+{"message":"Logged out"}
+[exit code: 0]
+
+$ echo "-- step 13 (logout with a foreign Origin)"; req POST /api/auth/logout -H "Origin: https://evil.example"; jq -c . $RUN/last.body
+-- step 13 (logout with a foreign Origin)
+403 0.002940
+{"detail":"Origin not allowed"}
+[exit code: 0]
+
+$ echo "-- step 14a (SQL injection pattern in the query string)"; req GET /api/tickets -G --data-urlencode "search=1' OR '1'='1"; jq -c . $RUN/last.body
+-- step 14a (SQL injection pattern in the query string)
+403 0.002440
+{"detail":"Request blocked by the proxy"}
+[exit code: 0]
+
+$ echo "-- step 14b (registration with a script in full_name)"; sleep 7; req POST /api/auth/register --data-binary @$RUN/reg.xss-script.json; jq -c . $RUN/last.body
+-- step 14b (registration with a script in full_name)
+403 0.005790
+{"detail":"Request blocked by the proxy"}
+[exit code: 0]
+
+$ echo "-- step 15 (8 parallel logins as ghost; job file shape below)"; for n in 1 2 3 4 5 6 7 8; do printf "g%s\tPOST\t/api/auth/login\t%s\t-\t-\n" $n $RUN/login.qa.final.$SFX.ghost.json; done > $RUN/ghost.jobs; cut -f2,3 $RUN/ghost.jobs | sort | uniq -c; wc -l < $RUN/ghost.jobs
+-- step 15 (8 parallel logins as ghost; job file shape below)
+      8 POST	/api/auth/login
+8
+[exit code: 0]
+
+$ wave ghost; summary ghost
+      4 401
+      4 429
+      4 Invalid username or password
+      2 Too many failed login attempts. Try again later.
+      2 Too many requests, try again later
+p50=0.155329 p95=0.787468 max=0.787468
+[exit code: 0]
+
+$ sort -k1,1 $RUN/ghost.out | cut -f1,2,4,5
+g1	401	Invalid username or password	
+g2	401	Invalid username or password	
+g3	401	Invalid username or password	
+g4	429	Too many requests, try again later	
+g5	401	Invalid username or password	
+g6	429	Too many failed login attempts. Try again later.	900
+g7	429	Too many requests, try again later	
+g8	429	Too many failed login attempts. Try again later.	900
+[exit code: 0]
+
+$ echo "-- step 16 (logs)"; docker compose logs --no-color api > "$RUN/api-stack.log"; docker compose logs --no-color proxy > "$RUN/proxy-stack.log"; wc -l $RUN/api-stack.log $RUN/proxy-stack.log
+-- step 16 (logs)
+  163 /tmp/pp-final.ZtQyGO/api-stack.log
+  233 /tmp/pp-final.ZtQyGO/proxy-stack.log
+  396 total
+[exit code: 0]
+
+## OPS-04 — log analysis (step 16 output in $RUN/api-stack.log and $RUN/proxy-stack.log; the API log also holds the FE-01–FE-06 events, which precede the OPS-04 window)
+
+$ grep "\"event\"" $RUN/api-stack.log | sed -E "s/^[^{]*//" > $RUN/api-events.jsonl; wc -l < $RUN/api-events.jsonl; grep -vc "^{" $RUN/api-events.jsonl
+52
+0
+[exit code: 1]
+
+$ awk "/\"event\": \"user_registered\".*\\.log1\"/ {f=1} f" $RUN/api-events.jsonl > $RUN/api-events.ops04.jsonl; wc -l < $RUN/api-events.ops04.jsonl
+26
+[exit code: 0]
+
+$ jq -c "with_entries(select(.value != null))" $RUN/api-events.ops04.jsonl
+{"client_ip":"172.20.0.1","event":"user_registered","role":"employee","user_id":5,"username":"qa.final.e39a69.log1"}
+{"client_ip":"172.20.0.1","event":"registration_conflict","username":"qa.final.e39a69.log1"}
+{"client_ip":"172.20.0.1","event":"login_failed","reason":"bad_password","username":"qa.final.e39a69.log1"}
+{"client_ip":"172.20.0.1","event":"login_failed","reason":"bad_password","username":"qa.final.e39a69.log1"}
+{"client_ip":"172.20.0.1","event":"login_failed","reason":"bad_password","username":"qa.final.e39a69.log1"}
+{"client_ip":"172.20.0.1","event":"login_failed","reason":"bad_password","username":"qa.final.e39a69.log1"}
+{"client_ip":"172.20.0.1","event":"login_failed","reason":"bad_password","username":"qa.final.e39a69.log1"}
+{"client_ip":"172.20.0.1","event":"login_blocked","username":"qa.final.e39a69.log1"}
+{"client_ip":"172.20.0.1","event":"login_failed","reason":"unknown_user","username":"qa.final.e39a69.ghost"}
+{"client_ip":"172.20.0.1","event":"user_registered","role":"employee","user_id":6,"username":"qa.final.e39a69.log2"}
+{"client_ip":"172.20.0.1","event":"login_succeeded","user_id":6,"username":"qa.final.e39a69.log2"}
+{"client_ip":"172.20.0.1","event":"session_rejected","reason":"unknown"}
+{"client_ip":"172.20.0.1","event":"login_succeeded","user_id":6,"username":"qa.final.e39a69.log2"}
+{"client_ip":"172.20.0.1","event":"login_succeeded","user_id":6,"username":"qa.final.e39a69.log2"}
+{"client_ip":"172.20.0.1","event":"access_denied","path":"/api/tickets/1","reason":"not_ticket_owner","ticket_id":1,"user_id":6}
+{"client_ip":"172.20.0.1","event":"access_denied","path":"/api/tickets/1","reason":"agent_role_required","user_id":6}
+{"client_ip":"172.20.0.1","event":"login_succeeded","user_id":1,"username":"helpdesk"}
+{"client_ip":"172.20.0.1","event":"ticket_updated","status":"in_progress","ticket_id":5,"user_id":1}
+{"client_ip":"172.20.0.1","event":"validation_failed","fields":"body.title,body.description,body.category","path":"/api/tickets","types":"missing,string_too_short"}
+{"client_ip":"172.20.0.1","event":"logout","user_id":6}
+{"client_ip":"172.20.0.1","event":"login_blocked","username":"qa.final.e39a69.ghost"}
+{"client_ip":"172.20.0.1","event":"login_blocked","username":"qa.final.e39a69.ghost"}
+{"client_ip":"172.20.0.1","event":"login_failed","reason":"unknown_user","username":"qa.final.e39a69.ghost"}
+{"client_ip":"172.20.0.1","event":"login_failed","reason":"unknown_user","username":"qa.final.e39a69.ghost"}
+{"client_ip":"172.20.0.1","event":"login_failed","reason":"unknown_user","username":"qa.final.e39a69.ghost"}
+{"client_ip":"172.20.0.1","event":"login_failed","reason":"unknown_user","username":"qa.final.e39a69.ghost"}
+[exit code: 0]
+
+$ jq -r ".event + (if .reason then \" reason=\" + .reason else \"\" end)" $RUN/api-events.ops04.jsonl | sort | uniq -c
+      1 access_denied reason=agent_role_required
+      1 access_denied reason=not_ticket_owner
+      3 login_blocked
+      5 login_failed reason=bad_password
+      5 login_failed reason=unknown_user
+      4 login_succeeded
+      1 logout
+      1 registration_conflict
+      1 session_rejected reason=unknown
+      1 ticket_updated
+      2 user_registered
+      1 validation_failed
+[exit code: 0]
+
+$ jq -r ".client_ip" $RUN/api-events.jsonl | sort | uniq -c
+     51 172.20.0.1
+      1 null
+[exit code: 0]
+
+$ docker network inspect patchpoint-final_edge -f "{{range .IPAM.Config}}gateway={{.Gateway}} subnet={{.Subnet}}{{end}}"
+gateway=172.20.0.1 subnet=172.20.0.0/16
+[exit code: 0]
+
+$ grep -c "10.253.0.10" $RUN/api-events.jsonl
+0
+[exit code: 1]
+
+$ jq -c "select(.event == \"validation_failed\")" $RUN/api-events.jsonl
+{"client_ip":"172.20.0.1","event":"validation_failed","fields":"body","path":"/api/auth/register","types":"value_error"}
+{"client_ip":"172.20.0.1","event":"validation_failed","fields":"body.title,body.description,body.category","path":"/api/tickets","types":"missing,string_too_short"}
+[exit code: 0]
+
+$ grep -c "evil.example" $RUN/api-stack.log $RUN/proxy-stack.log
+/tmp/pp-final.ZtQyGO/api-stack.log:0
+/tmp/pp-final.ZtQyGO/proxy-stack.log:0
+[exit code: 1]
+
+$ grep "POST /api/auth/logout HTTP/1.1\" 403" $RUN/proxy-stack.log | cut -c1-200
+proxy-1  | 172.20.0.1 - - [27/Nov/2026:23:00:11 +0000] "POST /api/auth/logout HTTP/1.1" 403 31 "-" "curl/8.23.0" "-"
+[exit code: 0]
+
+$ grep -o "\"ruleId\":\"[0-9]*\"" $RUN/proxy-stack.log | sort | uniq -c
+      2 "ruleId":"920180"
+      2 "ruleId":"941100"
+      2 "ruleId":"941110"
+      2 "ruleId":"941160"
+      2 "ruleId":"941390"
+      1 "ruleId":"942100"
+      3 "ruleId":"949110"
+[exit code: 0]
+
+$ grep -c "ModSecurity: Access denied with code 403" $RUN/proxy-stack.log
+3
+[exit code: 0]
+
+$ grep "limiting requests" $RUN/proxy-stack.log | cut -c1-250 | tail -n 4
+proxy-1  | 2026/11/27 22:54:37 [warn] 635#635: *26 limiting requests, excess: 5.697 by zone "patchpoint_auth", client: 172.20.0.1, server: patchpoint.localhost, request: "POST /api/auth/login HTTP/1.1", host: "patchpoint.localhost:28080"
+proxy-1  | 2026/11/27 22:54:38 [warn] 635#635: *26 limiting requests, excess: 5.627 by zone "patchpoint_auth", client: 172.20.0.1, server: patchpoint.localhost, request: "POST /api/auth/login HTTP/1.1", host: "patchpoint.localhost:28080"
+proxy-1  | 2026/11/27 23:00:26 [warn] 633#633: *172 limiting requests, excess: 5.993 by zone "patchpoint_auth", client: 172.20.0.1, server: patchpoint.localhost, request: "POST /api/auth/login HTTP/1.1", host: "patchpoint.localhost:28080"
+proxy-1  | 2026/11/27 23:00:26 [warn] 633#633: *173 limiting requests, excess: 5.992 by zone "patchpoint_auth", client: 172.20.0.1, server: patchpoint.localhost, request: "POST /api/auth/login HTTP/1.1", host: "patchpoint.localhost:28080"
+[exit code: 0]
+
+$ grep -c "limiting requests" $RUN/proxy-stack.log
+4
+[exit code: 0]
+
+$ grep -c "^$" $RUN/secrets.txt; wc -l < $RUN/secrets.txt
+0
+9
+[exit code: 0]
+
+$ grep -c -F -f $RUN/secrets.txt $RUN/api-stack.log $RUN/proxy-stack.log
+/tmp/pp-final.ZtQyGO/api-stack.log:0
+/tmp/pp-final.ZtQyGO/proxy-stack.log:0
+[exit code: 1]
+
+$ grep -rnF -f $RUN/secrets.txt $RUN/api-stack.log $RUN/proxy-stack.log | cut -c1-120
+[exit code: 0]
+
+$ docker compose logs --no-color api | grep -c "\"event\": \"internal_error\""
+0
+[exit code: 1]
+
+$ grep -cE "session=[A-Za-z0-9_-]{16,}|Set-Cookie|set-cookie" $RUN/api-stack.log $RUN/proxy-stack.log
+/tmp/pp-final.ZtQyGO/api-stack.log:0
+/tmp/pp-final.ZtQyGO/proxy-stack.log:0
+[exit code: 1]
+
+$ docker compose ps --format "{{.Name}} {{.Status}}"
+patchpoint-final-api-1 Up 10 minutes (healthy)
+patchpoint-final-proxy-1 Up 10 minutes (healthy)
+[exit code: 0]
+
+## Teardown
+
+$ docker compose down -v
+ Container patchpoint-final-proxy-1 Stopping 
+ Container patchpoint-final-proxy-1 Stopped 
+ Container patchpoint-final-proxy-1 Removing 
+ Container patchpoint-final-proxy-1 Removed 
+ Container patchpoint-final-api-1 Stopping 
+ Container patchpoint-final-api-1 Stopped 
+ Container patchpoint-final-api-1 Removing 
+ Container patchpoint-final-api-1 Removed 
+ Volume patchpoint-final_api-data Removing 
+ Network patchpoint-final_edge Removing 
+ Network patchpoint-final_backend Removing 
+ Volume patchpoint-final_api-data Removed 
+ Network patchpoint-final_backend Removed 
+ Network patchpoint-final_edge Removed 
+[exit code: 0]
+
+$ docker ps -a --format "{{.Names}}" | grep -E "^(patchpoint-final-|patchpoint-smoke|pp-ansible-target|pp-verify-)"
+[exit code: 1]
+
+$ docker volume ls -q | grep -E "^(patchpoint-final_|pp-ansible-docker$)"
+[exit code: 1]
+
+$ docker network ls --format "{{.Name}}" | grep -E "^patchpoint-final"
+[exit code: 1]
+
+$ ss -ltn | grep -E ":(1810[0-2]|28080|28443|2222)\b"
+[exit code: 1]
+
+$ docker ps --format "{{.Names}}"
+secure-k8s-aiops-control-plane
+secure-k8s-aiops-worker
+secure-k8s-aiops-worker2
+patchpoint-api-1
+patchpoint-proxy-1
+vina-searxng
+[exit code: 0]
