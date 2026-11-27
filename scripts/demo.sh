@@ -113,6 +113,7 @@ request 200 helpdesk PATCH "/api/tickets/$TICKET_ID" '{"status":"closed"}'
 jq -r '"Status końcowy: \(.status)"' "$BODY"
 
 echo
+# shellcheck disable=SC1111 # typograficzne cudzysłowy są częścią wypisywanego tekstu
 echo "==> Krok 11: Jan wyszukuje zgłoszenia frazą „dokuj”"
 request 200 jan GET "/api/tickets?search=dokuj"
 jq -r '.[] | "trafienie: #\(.id) \(.title)"' "$BODY"

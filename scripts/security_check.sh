@@ -216,10 +216,12 @@ else
   fixed W-06 "/api/auth/me bez klucza password_hash (HTTP $STATUS)"
 fi
 
+# shellcheck disable=SC2016 # literalny prefiks PHC "$argon2id$", bez rozwinięcia zmiennych
+ARGON2_PREFIX='$argon2id$'
 md5_of_pass=$(python3 -c 'import hashlib, sys; print(hashlib.md5(sys.argv[1].encode()).hexdigest())' "$PASS")
 if [[ -n "$DB_PATH" ]]; then
   stored_hash=$(sqlite_value 'SELECT password_hash FROM users WHERE username = ?' "$USER_A")
-  if [[ "$stored_hash" == '$argon2id$'* ]]; then
+  if [[ "$stored_hash" == "$ARGON2_PREFIX"* ]]; then
     fixed W-07 "users.password_hash zaczyna się od \$argon2id\$"
   elif [[ "$stored_hash" == "$md5_of_pass" ]]; then
     vuln W-07 "users.password_hash = md5(hasła), bez soli"
@@ -230,7 +232,7 @@ elif [[ -z "$ME_HASH" ]]; then
   fixed W-07 "API nie zwraca hasha (bez DB_PATH nie sprawdzono bazy)"
 elif [[ "$ME_HASH" == "$md5_of_pass" ]]; then
   vuln W-07 "hash z /api/auth/me = md5(hasła), bez soli"
-elif [[ "$ME_HASH" == '$argon2id$'* ]]; then
+elif [[ "$ME_HASH" == "$ARGON2_PREFIX"* ]]; then
   fixed W-07 "hash z /api/auth/me zaczyna się od \$argon2id\$"
 else
   vuln W-07 "hash z /api/auth/me nie jest Argon2id"
@@ -273,7 +275,12 @@ fi
 if ((w09_ok == 1)); then
   fixed W-09 "Set-Cookie z Max-Age${DB_PATH:+, sessions ma expires_at}"
 else
-  vuln W-09 "brak Max-Age w Set-Cookie${DB_PATH:+ lub expires_at w sessions (kolumny: $w09_columns)}"
+  # Szczegóły w zmiennej: nawiasy wewnątrz ${VAR:+...} wywalają parser bash w Semgrepie (błąd składni).
+  w09_detail=""
+  if [[ -n "$DB_PATH" ]]; then
+    w09_detail=" lub expires_at w sessions (kolumny: $w09_columns)"
+  fi
+  vuln W-09 "brak Max-Age w Set-Cookie${w09_detail}"
 fi
 
 w11_problems=""

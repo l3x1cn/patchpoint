@@ -65,7 +65,7 @@ Statyczny frontend (`http://patchpoint.localhost:5500`) wywołuje przez `fetch` 
 ├── scripts/
 │   ├── demo.sh               # scenariusz end-to-end przez curl i jq
 │   ├── security_check.sh     # PoC regresji bezpieczeństwa: 22 sprawdzenia, [PODATNE]/[NAPRAWIONE]/[POMINIĘTE]
-│   ├── scan.sh               # bramki Semgrep i Trivy (make semgrep, trivy-fs, trivy-images)
+│   ├── scan.sh               # bramki Semgrep, Trivy, ShellCheck i actionlint (make semgrep, trivy-fs, trivy-images, shellcheck, actionlint)
 │   ├── stack_smoke.sh        # smoke obrazów i stosu compose (make stack-smoke)
 │   └── dev_cert.sh           # certyfikat deweloperski (make dev-cert)
 └── docs/
@@ -197,7 +197,9 @@ Konta powstają tylko przy `PATCHPOINT_SEED_DEMO_DATA=true`; hasło wszystkich k
 | `make semgrep` | bramka Semgrep (SAST) z obrazu przypiętego po digeście; kod wyjścia różny od 0 przy znalezisku |
 | `make trivy-fs` | bramka Trivy na repozytorium (zależności z `backend/uv.lock`, sekrety, konfiguracja Dockerfile); kod wyjścia różny od 0 przy HIGH lub CRITICAL z dostępną poprawką |
 | `make trivy-images` | bramka Trivy na obrazach API i proxy; kod wyjścia różny od 0 przy HIGH lub CRITICAL z poprawką |
-| `make scan` | `semgrep`, `trivy-fs`, `images` i `trivy-images` po kolei |
+| `make shellcheck` | bramka ShellCheck na skryptach `*.sh` z obrazu przypiętego po digeście; kod wyjścia różny od 0 przy uwagach |
+| `make actionlint` | bramka actionlint na workflow w `.github/workflows/` z obrazu przypiętego po digeście; kod wyjścia różny od 0 przy uwagach |
+| `make scan` | `semgrep`, `trivy-fs`, `shellcheck`, `actionlint`, `images` i `trivy-images` po kolei |
 | `make ansible-lint` | `ansible-lint` w profilu `production` i `ansible-playbook --syntax-check` dla `deploy/ansible` |
 
 ## Dokumentacja

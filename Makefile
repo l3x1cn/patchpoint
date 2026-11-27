@@ -13,7 +13,7 @@ ANSIBLE_PYTHON ?= 3.13
 # Ścieżka --project jest względna wobec katalogu deploy/ansible, z którego działają polecenia celu.
 UV_ANSIBLE := uv run --locked --python $(ANSIBLE_PYTHON) --project tools
 
-.PHONY: install run test lint format typecheck frontend demo security-check images dev-cert semgrep trivy-fs trivy-images scan stack-up stack-down stack-smoke ansible-lint
+.PHONY: install run test lint format typecheck frontend demo security-check images dev-cert semgrep trivy-fs trivy-images shellcheck actionlint scan stack-up stack-down stack-smoke ansible-lint
 
 install:
 	cd $(BACKEND) && uv sync
@@ -59,7 +59,13 @@ trivy-images:
 	./scripts/scan.sh image api $(API_IMAGE)
 	./scripts/scan.sh image proxy $(PROXY_IMAGE)
 
-scan: semgrep trivy-fs images trivy-images
+shellcheck:
+	./scripts/scan.sh shellcheck
+
+actionlint:
+	./scripts/scan.sh actionlint
+
+scan: semgrep trivy-fs shellcheck actionlint images trivy-images
 
 stack-up: dev-cert images
 	PATCHPOINT_API_IMAGE=$(API_IMAGE) PATCHPOINT_PROXY_IMAGE=$(PROXY_IMAGE) docker compose up -d --wait

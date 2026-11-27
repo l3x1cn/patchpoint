@@ -74,6 +74,12 @@
       - "7"
       - -subj
       - "/CN={{ patchpoint_domain }}"
+      - -addext
+      - "subjectAltName=DNS:{{ patchpoint_domain }}"
+      - -addext
+      - "basicConstraints=critical,CA:FALSE"
+      - -addext
+      - "extendedKeyUsage=serverAuth"
       - -keyout
       - "{{ patchpoint_dir }}/tls/privkey.pem"
       - -out

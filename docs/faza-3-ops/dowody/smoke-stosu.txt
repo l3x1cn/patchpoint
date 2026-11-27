@@ -2,7 +2,7 @@ PATCHPOINT_API_IMAGE=patchpoint-api:local PATCHPOINT_PROXY_IMAGE=patchpoint-prox
 PatchPoint — smoke obrazów i stosu compose
 Obraz API: patchpoint-api:local
 Obraz proxy: patchpoint-proxy:local
-Data: 2026-11-19T13:42:53+01:00
+Data: 2026-11-27T19:20:27+01:00
 
 ==> Część 1: obrazy
 [OK] obraz API działa jako 10001:10001

@@ -3,36 +3,6 @@
 # ryzyko>”. Wpis kończy się datą przeglądu exp:RRRR-MM-DD, najwyżej 30 dni od dodania; po tej dacie Trivy
 # znów zgłasza znalezisko. Każdy wpis ma też wiersz w docs/faza-3-ops/dowody/triaz-skanow.md.
 
-# Obraz proxy (nginx 1.30.6-r1, owasp/modsecurity-crs:4.30.0-nginx-alpine-202611160811): poprawka jest w
-# nginx 1.30.7-r0, ale najnowszy tag obrazu z dnia 2026-11-19 jeszcze jej nie zawiera, a apk upgrade jest
-# wykluczony (moduł ModSecurity jest zbudowany dla konkretnej wersji nginx). Po wydaniu nowszego tagu: podbić
-# obraz (tabela „Przypięte wersje” w docs/faza-3-ops/README.md) i usunąć wpisy z tego bloku.
-
-# nginx: CVE-2026-113425 dotyczy nginx jako proxy poczty; konfiguracja proxy nie ma bloków mail ani stream.
-CVE-2026-113425 exp:2026-12-19
-
-# nginx: CVE-2026-121810 dotyczy HTTP/3 (QUIC); konfiguracja proxy nie ma żadnego nasłuchu quic.
-CVE-2026-121810 exp:2026-12-19
-
-# nginx: CVE-2026-123007 dotyczy HTTP/2; obraz ustawia HTTP2=off (deploy/proxy/Dockerfile), więc nginx nie
-# negocjuje h2 (ALPN) ani nie przyjmuje h2c — warunek nie jest spełniony.
-CVE-2026-123007 exp:2026-12-19
-
-# nginx: CVE-2026-123633 dotyczy HTTP/2; obraz ustawia HTTP2=off (deploy/proxy/Dockerfile), więc nginx nie
-# negocjuje h2 (ALPN) ani nie przyjmuje h2c — warunek nie jest spełniony.
-CVE-2026-123633 exp:2026-12-19
-
-# nginx: CVE-2026-123634 wymaga proxy_pass ze zmienną oraz dyrektywy ssi albo mirror; proxy używa proxy_pass
-# ze zmienną, ale konfiguracja nie ma ssi ani mirror (sprawdzone przez nginx -T), więc warunek nie jest spełniony.
-CVE-2026-123634 exp:2026-12-19
-
-# nginx: CVE-2026-118899 DOTYCZY tej konfiguracji: nasłuch `listen ... ssl` w kontekście http przy włączonym
-# TLS 1.3 pozwala spreparowanym połączeniem TLS wprowadzić proces roboczy nginx w nieskończoną pętlę podczas
-# czytania treści żądania; proces przestaje przyjmować połączenia (zdalny DoS bez uwierzytelnienia, tylko
-# warstwa danych: bez ujawnienia ani zmiany danych). Poprawka jest w nginx 1.30.7-r0, a żaden tag obrazu CRS
-# jej jeszcze nie zawiera. Ograniczenia ryzyka: proces proxy działa jako UID 101 z cap_drop ALL i
-# no-new-privileges, więc skutek ogranicza się do dostępności. Samoczynnego wyjścia z pętli nie ma:
-# restart: unless-stopped działa dopiero po zakończeniu procesu kontenera, a HEALTHCHECK tylko oznacza
-# kontener jako unhealthy; do odzyskania usługi potrzebny jest ręczny restart (docker compose restart proxy).
-# Ryzyko jest świadomie zaakceptowane do wydania tagu z nginx 1.30.7 (wtedy podbić obraz i usunąć wpis).
-CVE-2026-118899 exp:2026-12-19
+# Brak aktywnych wyjątków. Nowy wpis dodawaj tylko wtedy, gdy znaleziska nie da się usunąć przez przebudowę
+# obrazu bez cache (backend/Dockerfile robi apt-get upgrade, więc lokalna warstwa z cache potrafi zawierać
+# starsze pakiety niż świeża budowa) ani przez nowszy obraz bazowy.

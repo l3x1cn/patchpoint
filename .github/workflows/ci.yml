@@ -1,7 +1,8 @@
 # Potok CI/CD PatchPoint (Faza 3) dla każdego pull requesta i pushu na main.
 # 1. Przed budową obrazów, równolegle: quality (ruff z regułami S, mypy, pytest z pokryciem),
-#    semgrep (SAST), trivy-fs (podatności zależności z backend/uv.lock, sekrety, konfiguracja Dockerfile)
-#    i ansible (ansible-lint w profilu production oraz --syntax-check playbooka).
+#    semgrep (SAST), trivy-fs (podatności zależności z backend/uv.lock, sekrety, konfiguracja Dockerfile),
+#    ansible (ansible-lint w profilu production oraz --syntax-check playbooka) i scripts (ShellCheck skryptów
+#    *.sh oraz actionlint workflow).
 # 2. build (po zielonych jobach z punktu 1): obrazy api i proxy (make images), bramka Trivy obu obrazów
 #    (HIGH/CRITICAL z poprawką) i smoke stosu compose (scripts/stack_smoke.sh: PoC Fazy 2 w kontenerze, demo
 #    przez proxy, TLS, WAF, limit żądań, izolacja sieci). Obrazy po bramkach trafiają do artefaktu images.
@@ -106,8 +107,20 @@ jobs:
       - name: ansible-lint i syntax-check
         run: make ansible-lint
 
+  scripts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: ShellCheck
+        run: make shellcheck
+      - name: actionlint
+        run: make actionlint
+
   build:
-    needs: [quality, semgrep, trivy-fs, ansible]
+    needs: [quality, semgrep, trivy-fs, ansible, scripts]
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:

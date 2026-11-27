@@ -4,11 +4,11 @@
     name: ssh
     state: reloaded
 
+- name: Przeładuj konfigurację systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
 - name: Przeładuj nftables
   ansible.builtin.service:
     name: nftables
     state: reloaded
-
-- name: Przeładuj konfigurację systemd
-  ansible.builtin.systemd_service:
-    daemon_reload: true

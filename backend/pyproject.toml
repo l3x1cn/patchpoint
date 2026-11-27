@@ -1,7 +1,7 @@
 [project]
 name = "patchpoint-backend"
-version = "0.2.0"
-description = "PatchPoint — API systemu zgłoszeń IT (Faza 2, po audycie bezpieczeństwa)"
+version = "0.3.0"
+description = "PatchPoint — API systemu zgłoszeń IT (Faza 3, wdrożenie i hardening)"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.163.1",
