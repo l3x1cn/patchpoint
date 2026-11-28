@@ -7,6 +7,8 @@
 #                                         z dostępną poprawką
 #   scripts/scan.sh image <nazwa> <obraz> Trivy na obrazie z lokalnego Dockera; kod 1 przy HIGH lub CRITICAL
 #                                         z dostępną poprawką
+#   scripts/scan.sh shellcheck            ShellCheck na wszystkich śledzonych skryptach *.sh; kod 1 przy uwagach
+#   scripts/scan.sh actionlint            actionlint na .github/workflows/*.yml; kod 1 przy uwagach
 # Skanery działają z obrazów przypiętych po digeście: bez instalacji i bez aquasecurity/trivy-action
 # (CVE-2026-33634). Pełne wyniki (wszystkie poziomy): reports/<nazwa>.json i reports/<nazwa>.sarif.
 # Wyjątki: .semgrepignore (ścieżki), komentarz nosemgrep z identyfikatorem reguły i uzasadnieniem,
@@ -17,6 +19,8 @@ cd "$(dirname "$0")/.."
 
 SEMGREP_IMAGE="semgrep/semgrep:1.185.0@sha256:67518c174185a2043fdbed16c70631b79209499b3671178e7194379b48295a0d"
 TRIVY_IMAGE="aquasec/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb"
+SHELLCHECK_IMAGE="koalaman/shellcheck:v0.11.0@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d"
+ACTIONLINT_IMAGE="rhysd/actionlint:1.7.7@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9"
 SEMGREP_CONFIGS=(p/python p/javascript p/dockerfile p/docker-compose p/github-actions p/owasp-top-ten)
 TRIVY_SKIP_DIRS=".git,.av,reports,backend/.venv,backend/.mypy_cache,backend/.pytest_cache,backend/.ruff_cache,deploy/proxy/dev-tls,deploy/ansible/.ansible,deploy/ansible/tools/.venv"
 
@@ -25,7 +29,7 @@ TRIVY_CACHE="${TRIVY_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/patchpoint-trivy
 USER_SPEC="$(id -u):$(id -g)"
 
 usage() {
-  echo "Użycie: $0 semgrep | fs | image <nazwa> <obraz>" >&2
+  echo "Użycie: $0 semgrep | fs | image <nazwa> <obraz> | shellcheck | actionlint" >&2
   exit 2
 }
 
@@ -71,7 +75,16 @@ case "${1:-}" in
     status=$?
     set -e
     case "$status" in
-      0) echo "Bramka Semgrep: brak znalezisk. Wyniki: reports/semgrep.json, reports/semgrep.sarif" ;;
+      0)
+        # Semgrep zgłasza błąd składni jako ostrzeżenie (kod 0): plik, którego nie sparsował, nie został
+        # przeskanowany, więc bramka traktuje to jako porażkę.
+        syntax_errors="$(jq -r '[.errors[] | select(.type == "Syntax error") | .path] | join(", ")' "$REPORTS/semgrep.json")"
+        if [[ -n "$syntax_errors" ]]; then
+          echo "Bramka Semgrep: błąd składni, pliki nieprzeskanowane: $syntax_errors" >&2
+          exit 1
+        fi
+        echo "Bramka Semgrep: brak znalezisk. Wyniki: reports/semgrep.json, reports/semgrep.sarif"
+        ;;
       1)
         echo "Bramka Semgrep: znaleziska (lista wyżej). Wyniki: reports/semgrep.json, reports/semgrep.sarif" >&2
         exit 1
@@ -101,6 +114,17 @@ case "${1:-}" in
     trivy_run -v "$work:/work:ro" -- image --scanners vuln --ignore-unfixed --ignorefile /src/.trivyignore \
       --input /work/image.tar --format json --output "/reports/$name.json"
     trivy_gate "$name" vuln
+    ;;
+  shellcheck)
+    [[ $# -eq 1 ]] || usage
+    mapfile -t scripts < <(git ls-files '*.sh')
+    docker run --rm --user "$USER_SPEC" -v "$PWD:/mnt:ro" -w /mnt "$SHELLCHECK_IMAGE" "${scripts[@]}"
+    echo "Bramka ShellCheck: brak uwag (${#scripts[@]} skryptów)."
+    ;;
+  actionlint)
+    [[ $# -eq 1 ]] || usage
+    docker run --rm --user "$USER_SPEC" -v "$PWD:/mnt:ro" -w /mnt "$ACTIONLINT_IMAGE" -color
+    echo "Bramka actionlint: brak uwag."
     ;;
   *)
     usage

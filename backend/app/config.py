@@ -4,7 +4,7 @@ from typing import Final, Self
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-APP_VERSION: Final = "0.2.0"
+APP_VERSION: Final = "0.3.0"
 BACKEND_DIR: Final = Path(__file__).resolve().parent.parent
 HOST_COOKIE_PREFIX: Final = "__Host-"
 

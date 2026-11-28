@@ -11,6 +11,7 @@ from app.security import hash_password, password_policy_violation
 
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 SCHEMA_VERSION: Final = 2
+SQLITE_BUSY_TIMEOUT_SECONDS: Final = 5.0
 USER_COLUMNS: Final = ("id", "username", "full_name", "department", "role", "created_at")
 
 type SqlParams = Sequence[object] | Mapping[str, object]
@@ -116,7 +117,9 @@ def utc_now_iso() -> str:
 
 
 def connect(database_path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(database_path, check_same_thread=False)
+    conn = sqlite3.connect(
+        database_path, timeout=SQLITE_BUSY_TIMEOUT_SECONDS, check_same_thread=False
+    )
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
@@ -277,6 +280,10 @@ def init_db(database_path: Path, *, demo_password: str | None) -> None:
 
     with closing(connect(database_path)) as conn:
         _check_schema_version(conn, database_path)
+        # SQLite runs on the event-loop thread, so a commit blocked by another connection would
+        # stall every request. In WAL mode readers outside the API (backups, the sqlite3 shell,
+        # QA checks) do not block its writes. The mode is stored in the database file.
+        fetch_one(conn, "PRAGMA journal_mode = WAL")
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
         if demo_password is not None:
             seed_demo_data(conn, password=demo_password)

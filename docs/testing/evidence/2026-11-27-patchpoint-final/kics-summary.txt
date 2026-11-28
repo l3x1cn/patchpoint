@@ -1,0 +1,16 @@
+# KICS v2.2.1 (checkmarx/kics@sha256:49ccc54b6ae7f5d5fc95e96f8f95c18c57f3bba047ab611a03d80792bdff6757) — OPS-12 — head cb1bf735664e0f9b1909b4feda4b13cfac3478fe
+# Scanned: compose.yaml, backend/Dockerfile, deploy/proxy/Dockerfile, deploy/ansible (excluding tools and .ansible), .github/workflows. Full report: kept in $RUN only (deleted at the end).
+
+## severity_counters (from kics.json)
+{"CRITICAL":0,"HIGH":0,"INFO":1,"LOW":1,"MEDIUM":2,"TRACE":0}
+
+## scan size (from kics.json)
+{"files_scanned":14,"files_parsed":14,"lines_scanned":787,"queries_total":675,"queries_failed_to_execute":0,"total_counter":4}
+
+## HIGH and MEDIUM (and CRITICAL) queries: severity, query name, file, line, search key
+MEDIUM	Healthcheck Not Set	compose.yaml	18	services.api
+MEDIUM	Healthcheck Not Set	compose.yaml	49	services.proxy
+
+## LOW and INFO queries (reported for completeness; not required by the scenario)
+LOW	Logging of Sensitive Data In Defaults	deploy/ansible/ansible.cfg	2	defaults
+INFO	Shared Volumes Between Containers	compose.yaml	32	services.api.volumes

@@ -1,0 +1,959 @@
+# Task 12 re-test after the final fixes — 2026-11-28 (started 08:58 local time)
+# Head: 8fd2c1ccce5efb753641dad716579aeec4568497 on delivery/patchpoint-final-testing
+# docker: Docker version 29.10.0, build fdd4b8e5da
+# Applied fixes (git log --format=%s main..HEAD): Task 7 "fix(backend): enable SQLite WAL so external readers do not block API writes", Task 8 "fix(backend): bound concurrent Argon2 hashing below the API memory limit", Task 9 "fix: pin the API to one uvicorn worker regardless of WEB_CONCURRENCY", Task 11 "docs: correct repository visibility and GHCR status and add the tested restore procedure". Task 10 (Ansible role fixes) was skipped: OPS-17 passed all checks in the baseline, so it has no after-fix retest.
+# Scenarios repeated: OPS-01 (in full), BE-02, BE-03 (always); BE-05 (Task 7); OPS-09, OPS-10 on a fresh stack (Task 7); OPS-05 on a fresh stack (Task 8); BE-06 (Task 9). OPS-17 is not repeated.
+# Convention: $RUN is a private temp directory (deleted at the end), $SFX = d1b129, passwords, cookie jars and request bodies live only under $RUN. Every block starts with "$ <command>" and ends with the real exit code of that command (for pipelines: that of the last command). The Setup helpers new_user, req, wave and summary are those of the test plan; "rec" only wraps a command to record it.
+
+## OPS-01 (re-run in full; the full outputs overwrite docs/faza-3-ops/dowody/*.txt, the deciding lines are below)
+
+$ make lint
+cd backend && uv run ruff check . && uv run ruff format --check .
+All checks passed!
+29 files already formatted
+[exit code: 0]
+
+$ make typecheck
+cd backend && uv run mypy app tests
+Success: no issues found in 29 source files
+[exit code: 0]
+
+$ make test
+collected 148 items
+TOTAL                       601     10    98%
+Required test coverage of 80% reached. Total coverage: 98.34%
+============================= 148 passed in 13.81s =============================
+[exit code: 0]
+
+$ make semgrep
+ • Findings: 0 (0 blocking)
+ • Rules run: 275
+ • Targets scanned: 71
+Ran 275 rules on 71 files: 0 findings.
+Bramka Semgrep: brak znalezisk. Wyniki: reports/semgrep.json, reports/semgrep.sarif
+[exit code: 0]
+
+$ jq '.errors | length' reports/semgrep.json
+0
+[exit code: 0]
+
+$ make trivy-fs
+│ backend/uv.lock              │     uv     │        0        │    -    │         -         │
+│ deploy/ansible/tools/uv.lock │     uv     │        0        │    -    │         -         │
+│ backend/Dockerfile           │ dockerfile │        -        │    -    │         0         │
+│ deploy/proxy/Dockerfile      │ dockerfile │        -        │    -    │         0         │
+Bramka Trivy (trivy-fs): brak znalezisk HIGH i CRITICAL. Wyniki: reports/trivy-fs.json, reports/trivy-fs.sarif
+[exit code: 0]
+
+$ make shellcheck
+Bramka ShellCheck: brak uwag (5 skryptów).
+[exit code: 0]
+
+$ make actionlint
+Bramka actionlint: brak uwag.
+[exit code: 0]
+
+$ make ansible-lint
+Passed: 0 failure(s), 0 warning(s) in 28 files processed of 29 encountered. Profile 'production' was required, and it passed.
+cd deploy/ansible && ANSIBLE_COLLECTIONS_PATH=.ansible/collections uv run --locked --python 3.13 --project tools ansible-playbook --syntax-check -i inventory.example.yml site.yml
+[exit code: 0]
+
+$ docker build --no-cache --label org.opencontainers.image.source=https://github.com/l3x1cn/patchpoint --label org.opencontainers.image.revision="$(git rev-parse HEAD)" --label org.opencontainers.image.title=patchpoint-api -t patchpoint-api:local backend
+# ($(git rev-parse HEAD) = 8fd2c1ccce5efb753641dad716579aeec4568497. Build step "#9 [stage-2 2/6] RUN apt-get update && … apt-get upgrade --yes …" ran again: it carries no CACHED marker; only the base-image metadata steps #6 and #7 do.)
+#17 exporting manifest list sha256:f198a9af4cc46646540f844461c052dbfe5de8a60237403f71076b104e2ecfaf 0.0s done
+#17 naming to docker.io/library/patchpoint-api:local
+#17 naming to docker.io/library/patchpoint-api:local done
+[exit code: 0]
+
+$ make images
+#17 naming to docker.io/library/patchpoint-api:local done
+#12 naming to docker.io/library/patchpoint-proxy:local done
+[exit code: 0]
+
+$ make trivy-images
+│ /work/image.tar (debian 13.8)                                                    │   debian   │        0        │
+Bramka Trivy (trivy-image-api): brak znalezisk HIGH i CRITICAL. Wyniki: reports/trivy-image-api.json, reports/trivy-image-api.sarif
+│ /work/image.tar (alpine 3.24.4) │ alpine │        0        │
+Bramka Trivy (trivy-image-proxy): brak znalezisk HIGH i CRITICAL. Wyniki: reports/trivy-image-proxy.json, reports/trivy-image-proxy.sarif
+[exit code: 0]
+
+$ make stack-smoke
+[OK] PoC Fazy 2 w kontenerze API: 22 × [NAPRAWIONE]
+STACK SMOKE ZAKOŃCZONY POWODZENIEM
+[exit code: 0]
+
+
+## BE-02: Parallel sign-up and sign-in (instance dev, 18100)
+
+$ BASE=http://127.0.0.1:18100; for n in $(seq -w 1 20); do u=qa.final.$SFX.p$n; new_user $u; req POST /api/auth/register --data-binary @$RUN/reg.$u.json | cut -d" " -f1; done | sort | uniq -c
+     20 201
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/dev/patchpoint.db" "PRAGMA journal_mode; SELECT COUNT(*) FROM users; SELECT COUNT(*) FROM tickets"
+wal
+23
+3
+[exit code: 0]
+
+$ : > $RUN/be02a.jobs
+for n in $(seq -w 1 20); do
+  printf 'p%s\tPOST\t/api/auth/login\t%s\t-\t%s\n' $n "$RUN/login.qa.final.$SFX.p$n.json" "$RUN/p$n.jar" >> $RUN/be02a.jobs
+  new_user qa.final.$SFX.n$n
+  printf 'n%s\tPOST\t/api/auth/register\t%s\t-\t-\n' $n "$RUN/reg.qa.final.$SFX.n$n.json" >> $RUN/be02a.jobs
+done
+wc -l < $RUN/be02a.jobs
+40
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18100; wave be02a; summary be02a
+     20 200
+     20 201
+     40 
+p50=0.424517 p95=0.663681 max=0.670096
+[exit code: 0]
+
+$ : > $RUN/be02b.jobs
+for n in $(seq -w 1 20); do for t in 1 2; do
+  id=p$n-$t
+  jq -nc --arg t "Load $SFX $id" '{title: $t, description: "Parallel ticket", category: "other", priority: "low"}' > $RUN/t.$id.json
+  printf '%s\tPOST\t/api/tickets\t%s\t%s\t-\n' $id "$RUN/t.$id.json" "$RUN/p$n.jar" >> $RUN/be02b.jobs
+done; done
+wc -l < $RUN/be02b.jobs
+40
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18100; wave be02b; summary be02b
+     40 201
+     40 
+p50=0.002120 p95=0.002994 max=0.009341
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/dev/patchpoint.db" "SELECT COUNT(*) FROM users; SELECT COUNT(*) FROM tickets"
+43
+43
+[exit code: 0]
+
+$ grep -c "\"event\": \"internal_error\"" "$RUN/dev/api.log" || true
+0
+[exit code: 0]
+
+-- edge a)
+$ : > $RUN/be02c.jobs
+for n in $(seq -w 1 20); do
+  jq -nc --arg u qa.final.$SFX.p$n '{username: $u, password: "Wrong-Password-12345"}' > $RUN/wrong.p$n.json
+  printf 'p%s\tPOST\t/api/auth/login\t%s\t-\t-\n' $n "$RUN/wrong.p$n.json" >> $RUN/be02c.jobs
+done
+wc -l < $RUN/be02c.jobs
+20
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18100; wave be02c; summary be02c
+     20 401
+     20 Invalid username or password
+p50=0.222465 p95=0.341583 max=0.361206
+[exit code: 0]
+
+$ grep -c "\"event\": \"internal_error\"" "$RUN/dev/api.log" || true
+0
+[exit code: 0]
+
+
+## BE-03: Parallel wrong passwords versus the lockout (instance dev, 18100)
+
+$ BASE=http://127.0.0.1:18100; u=qa.final.$SFX.lock; new_user $u; req POST /api/auth/register --data-binary @$RUN/reg.$u.json
+201 0.036973
+[exit code: 0]
+
+$ : > $RUN/be03.jobs
+jq -nc --arg u qa.final.$SFX.lock '{username: $u, password: "Wrong-Password-12345"}' > $RUN/wrong.lock.json
+for n in $(seq -w 1 20); do
+  printf 'l%s\tPOST\t/api/auth/login\t%s\t-\t-\n' $n "$RUN/wrong.lock.json" >> $RUN/be03.jobs
+done
+wc -l < $RUN/be03.jobs
+20
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18100; wave be03; summary be03
+      5 401
+     15 429
+      5 Invalid username or password
+     15 Too many failed login attempts. Try again later.
+p50=0.002832 p95=0.128167 max=0.131683
+[exit code: 0]
+
+$ cut -f2,5 "$RUN/be03.out" | awk -F"\t" "{print \$1\" retry-after=\"\$2}" | sort | uniq -c
+      5 401 retry-after=
+     15 429 retry-after=900
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/dev/patchpoint.db" "SELECT COUNT(*) FROM login_failures WHERE username = 'qa.final.$SFX.lock'"
+5
+[exit code: 0]
+
+-- edge a) correct password afterwards, edge b) p01 login
+$ BASE=http://127.0.0.1:18100; u=qa.final.$SFX.lock; req POST /api/auth/login --data-binary @$RUN/login.$u.json; jq -c .detail "$RUN/last.body"
+429 0.001675
+"Too many failed login attempts. Try again later."
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18100; u=qa.final.$SFX.p01; req POST /api/auth/login --data-binary @$RUN/login.$u.json -c $RUN/p01b.jar
+200 0.038733
+[exit code: 0]
+
+$ grep -c internal_error "$RUN/dev/api.log" || true
+0
+[exit code: 0]
+
+
+## BE-05: API write during an external SQLite read transaction (instance dev, 18100)
+
+$ BASE=http://127.0.0.1:18100; u=qa.final.$SFX.wal; new_user $u; req POST /api/auth/register --data-binary @$RUN/reg.$u.json
+201 0.039421
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/dev/patchpoint.db" "PRAGMA journal_mode"
+wal
+[exit code: 0]
+
+$ jq -nc --arg u qa.final.$SFX.wal '{username: $u, password: "Wrong-Password-12345"}' > $RUN/be05.wrong.req
+[exit code: 0]
+
+# edge a) control without the reader (run first)
+$ BASE=http://127.0.0.1:18100; req POST /api/auth/login --data-binary @$RUN/be05.wrong.req; jq -c .detail $RUN/last.body
+401 0.042112
+"Invalid username or password"
+[exit code: 0]
+
+# reader script ($RUN/reader.py):
+#   import sqlite3, sys, time
+#   db = sys.argv[1]
+#   c = sqlite3.connect(db, isolation_level=None)
+#   c.execute("BEGIN")
+#   print("reader count users:", c.execute("SELECT COUNT(*) FROM users").fetchone()[0], flush=True)
+#   time.sleep(15)
+#   c.execute("ROLLBACK")
+#   c.close()
+#   print("reader rolled back", flush=True)
+
+# Run 1 (MODE=seq): the login is a foreground request, as the plan's steps read; t = seconds from the reader start, taken when each request was launched
+$ export BASE SFX RUN; MODE=seq REGUSER=wal2 bash $RUN/be05.sh
+t=1.0 login(wrong pw) started: 401 0.037344s detail="Invalid username or password"
+t=1.5 health#1 started: 200 0.001350s
+t=2.5 health#2 started: 200 0.001289s
+t=3.5 health#3 started: 200 0.001325s
+t=4.5 health#4 started: 200 0.001568s
+t=5.5 health#5 started: 200 0.001398s
+t=7.0 register wal2 started: 201 0.038038s body={"username":"qa.final.d1b129.wal2","role":"employee"}
+reader count users: 45
+reader rolled back
+[exit code: 0]
+
+$ grep -c internal_error "$RUN/dev/api.log" || true
+0
+[exit code: 0]
+
+# Run 2 (MODE=bg): the same timeline, but the login runs in the background so that the health requests at t~1.5-5.5 overlap it (registers wal3, because wal2 exists from run 1)
+$ export BASE SFX RUN; MODE=bg REGUSER=wal3 bash $RUN/be05.sh
+t=1.5 health#1 started: 200 0.001322s
+t=2.5 health#2 started: 200 0.001471s
+t=3.5 health#3 started: 200 0.001553s
+t=4.5 health#4 started: 200 0.001891s
+t=5.5 health#5 started: 200 0.002115s
+t=7.0 register wal3 started: 201 0.042349s body={"username":"qa.final.d1b129.wal3","role":"employee"}
+t=1.0 login(wrong pw) started: 401 0.040843s detail="Invalid username or password"
+reader count users: 46
+reader rolled back
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18100; curl -s --noproxy "*" -m 30 -o /dev/null -w "after reader: health %{http_code} %{time_total}s\n" $BASE/api/health
+after reader: health 200 0.001453s
+[exit code: 0]
+
+$ grep -c internal_error "$RUN/dev/api.log" || true
+0
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/dev/patchpoint.db" "PRAGMA journal_mode"
+wal
+[exit code: 0]
+
+
+## BE-06: Several processes (WEB_CONCURRENCY=4) versus the lockout (instance workers, 18101)
+
+$ ps -eo args | grep "[u]vicorn app.main:app --host 127.0.0.1 --port 18101"; tr "\0" " " < /proc/$(ss -ltnp "sport = :18101" | sed -n "s/.*pid=\([0-9]*\).*/\1/p" | head -1)/environ | tr " " "\n" | grep -c "^WEB_CONCURRENCY=4$"
+uv run uvicorn app.main:app --host 127.0.0.1 --port 18101 --workers 1 --no-proxy-headers
+/home/lex/Projects/patchpoint/backend/.venv/bin/python /home/lex/Projects/patchpoint/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 18101 --workers 1 --no-proxy-headers
+1
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18101; u=qa.final.$SFX.mp; new_user $u; req POST /api/auth/register --data-binary @$RUN/reg.$u.json
+201 0.045252
+[exit code: 0]
+
+$ grep -c "Started server process" $RUN/workers/api.log; grep -E "Started (parent|server) process|Uvicorn running|Started reloader|^cd backend" $RUN/workers/api.log | cut -c1-160
+1
+cd backend && uv run uvicorn app.main:app --host 127.0.0.1 --port 18101 --workers 1 --no-proxy-headers
+INFO:     Started server process [147641]
+INFO:     Uvicorn running on http://127.0.0.1:18101 (Press CTRL+C to quit)
+[exit code: 0]
+
+$ P=$(grep -m1 "Started server process" $RUN/workers/api.log | sed "s/.*\[\([0-9]*\)\]/\1/"); echo "server pid $P"; ps -eo pid,ppid,args | awk -v p=$P "\$2==p {print}" | cut -c1-110 | wc -l
+server pid 147641
+0
+[exit code: 0]
+
+$ : > $RUN/be06.jobs
+jq -nc --arg u qa.final.$SFX.mp '{username: $u, password: "Wrong-Password-12345"}' > $RUN/wrong.mp.json
+for n in $(seq -w 1 20); do
+  printf 'g%s\tPOST\t/api/auth/login\t%s\t-\t-\n' $n "$RUN/wrong.mp.json" >> $RUN/be06.jobs
+done
+wc -l < $RUN/be06.jobs
+20
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18101; wave be06; summary be06
+      5 401
+     15 429
+      5 Invalid username or password
+     15 Too many failed login attempts. Try again later.
+p50=0.002638 p95=0.118202 max=0.126652
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/workers/patchpoint.db" "SELECT COUNT(*) FROM login_failures WHERE username = 'qa.final.$SFX.mp'"
+5
+[exit code: 0]
+
+$ : > $RUN/be06w.jobs
+for n in $(seq -w 1 40); do
+  new_user qa.final.$SFX.w$n
+  printf 'w%s\tPOST\t/api/auth/register\t%s\t-\t-\n' $n "$RUN/reg.qa.final.$SFX.w$n.json" >> $RUN/be06w.jobs
+done
+wc -l < $RUN/be06w.jobs
+40
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18101; wave be06w; summary be06w
+     40 201
+     40 
+p50=0.236823 p95=0.385113 max=0.394255
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/workers/patchpoint.db" "SELECT COUNT(*) FROM users"
+41
+[exit code: 0]
+
+$ grep -c internal_error $RUN/workers/api.log || true
+0
+[exit code: 0]
+
+# edge a) control on dev (same 20-guess wave; fresh user .ctl)
+$ BASE=http://127.0.0.1:18100; u=qa.final.$SFX.ctl; new_user $u; req POST /api/auth/register --data-binary @$RUN/reg.$u.json
+201 0.039591
+[exit code: 0]
+
+$ : > $RUN/be06c.jobs
+jq -nc --arg u qa.final.$SFX.ctl '{username: $u, password: "Wrong-Password-12345"}' > $RUN/wrong.ctl.json
+for n in $(seq -w 1 20); do
+  printf 'g%s\tPOST\t/api/auth/login\t%s\t-\t-\n' $n "$RUN/wrong.ctl.json" >> $RUN/be06c.jobs
+done
+wc -l < $RUN/be06c.jobs
+20
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18100; wave be06c; summary be06c
+      5 401
+     15 429
+      5 Invalid username or password
+     15 Too many failed login attempts. Try again later.
+p50=0.003268 p95=0.127882 max=0.146668
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/dev/patchpoint.db" "SELECT COUNT(*) FROM login_failures WHERE username = 'qa.final.$SFX.ctl'"
+5
+[exit code: 0]
+
+
+## Stop of the dev instances
+
+$ for p in 18100 18101; do pid=$(ss -ltnp "sport = :$p" | sed -n "s/.*pid=\([0-9]*\).*/\1/p" | head -1); pg=$(ps -o pgid= -p $pid | tr -d " "); echo "port $p pid $pid pgid $pg"; kill -TERM -- "-$pg"; done; sleep 3; ss -ltn | grep -cE ":(18100|18101|18102)\b" || true
+port 18100 pid 147636 pgid 147631
+port 18101 pid 147641 pgid 147637
+0
+[exit code: 0]
+
+
+## Setup — fresh stack patchpoint-final (images rebuilt in OPS-01 from head 8fd2c1c, i.e. with Tasks 7-9)
+# Every docker compose command ran with the Setup env block exported (COMPOSE_PROJECT_NAME=patchpoint-final, …), so it addresses only patchpoint-final-*.
+# stack env file "$RUN/stack-api.env" (mode 600) written as in Setup: the seed flag and the run's demo password variable (value from $DEMO_PW, not printed here)
+
+$ docker image inspect -f "{{.RepoTags}} {{.Id}}" patchpoint-api:local patchpoint-proxy:local
+[patchpoint-api:local] sha256:0f10c702f4ab0d3d1e2522e257619193a8b61543872286213bfde8c0aae6d598
+[patchpoint-proxy:local] sha256:b9913f3b71890c4af68e97b4d457497367b9d1a2c810f50662d91cc46fbc93df
+[exit code: 0]
+
+$ docker compose ps; docker volume ls -q --filter name=patchpoint-final_
+NAME      IMAGE     COMMAND   SERVICE   CREATED   STATUS    PORTS
+[exit code: 0]
+
+$ make dev-cert 2>&1 | tail -3; docker compose up -d --wait --wait-timeout 180 2>&1 | tail -15; docker compose ps
+./scripts/dev_cert.sh deploy/proxy/dev-tls
+Certyfikat deweloperski w deploy/proxy/dev-tls jest ważny.
+ Network patchpoint-final_backend Created 
+ Container patchpoint-final-api-1 Creating 
+ Container patchpoint-final-api-1 Created 
+ Container patchpoint-final-proxy-1 Creating 
+ Container patchpoint-final-proxy-1 Created 
+ Container patchpoint-final-api-1 Starting 
+ Container patchpoint-final-api-1 Started 
+ Container patchpoint-final-api-1 Waiting 
+ Container patchpoint-final-api-1 Healthy 
+ Container patchpoint-final-proxy-1 Starting 
+ Container patchpoint-final-proxy-1 Started 
+ Container patchpoint-final-proxy-1 Waiting 
+ Container patchpoint-final-api-1 Waiting 
+ Container patchpoint-final-api-1 Healthy 
+ Container patchpoint-final-proxy-1 Healthy 
+NAME                       IMAGE                    COMMAND                  SERVICE   CREATED         STATUS                   PORTS
+patchpoint-final-api-1     patchpoint-api:local     "uvicorn app.main:ap…"   api       5 seconds ago   Up 5 seconds (healthy)   8000/tcp
+patchpoint-final-proxy-1   patchpoint-proxy:local   "/docker-entrypoint.…"   proxy     5 seconds ago   Up 2 seconds (healthy)   127.0.0.1:28080->8080/tcp, 127.0.0.1:28443->8443/tcp
+[exit code: 0]
+
+$ docker compose exec -T api sh -c "ps -o pid,args | grep \"[u]vicorn\"; cat /proc/1/cmdline | tr \"\\0\" \" \"; echo"; docker compose logs --no-color api 2>&1 | grep -c "Started server process"
+sh: 1: ps: not found
+/app/.venv/bin/python /app/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1 --no-server-header 
+1
+[exit code: 0]
+
+
+## OPS-05 — parallel logins versus the API memory limit (fresh stack)
+
+$ RC0=$(docker inspect -f "{{.RestartCount}}" patchpoint-final-api-1); echo "RC0=$RC0"; docker inspect -f "{{.RestartCount}} {{.State.OOMKilled}} {{.State.Status}}" patchpoint-final-api-1; echo "proxy: $(docker inspect -f "{{.RestartCount}}" patchpoint-final-proxy-1)"
+RC0=0
+0 false running
+proxy: 0
+[exit code: 0]
+
+# 40 registration bodies (reg.qa.final.$SFX.mNN.json) and 40 login bodies (login.qa.final.$SFX.mNN.json), NN=01..40, in $RUN/oom/, built by the Setup function new_user (random password per user, jq over stdin, bodies not printed).
+$ mkdir -p "$RUN/oom"
+for n in $(seq -w 1 40); do new_user qa.final.$SFX.m$n; cp "$RUN/reg.qa.final.$SFX.m$n.json" "$RUN/oom/"; cp "$RUN/login.qa.final.$SFX.m$n.json" "$RUN/oom/"; done
+ls "$RUN/oom" | wc -l
+80
+[exit code: 0]
+
+# samplers (started in the background before the client): 1) the plan's docker stats loop every 0.5 s (one call takes ~2 s); 2) a supplement: memory.current of the API cgroup read through docker compose exec in a tight loop
+$ touch "$RUN/oom/sampling"; : > "$RUN/mem.txt"; : > "$RUN/mem2.txt"; (while [ -e "$RUN/oom/sampling" ]; do date +%s.%N >> "$RUN/mem.txt"; docker stats --no-stream --format "{{.MemUsage}}" patchpoint-final-api-1 >> "$RUN/mem.txt"; sleep 0.5; done) & echo $! > "$RUN/sampler1.pid"; (while [ -e "$RUN/oom/sampling" ]; do echo "$(date +%s.%N) $(docker exec patchpoint-final-api-1 cat /sys/fs/cgroup/memory.current)" >> "$RUN/mem2.txt"; done) & echo $! > "$RUN/sampler2.pid"; echo started
+started
+[exit code: 0]
+
+$ date +%s.%N; time docker run --rm --network patchpoint-final_backend --user "$(id -u):$(id -g)" -v "$RUN/oom:/work" \
+  curlimages/curl@sha256:3fb7e13e5d179a845c97d78204f3f1064d1907037f26a3ebf91710571151fd93 sh -c '
+  cd /work
+  for f in reg.*.json; do curl -s -o /dev/null -w "%{http_code}\n" -H "Content-Type: application/json" --data-binary "@$f" http://api:8000/api/auth/register >> reg.out; done
+  for f in login.*.json; do (curl -s -o /dev/null -m 120 -w "%{http_code} %{time_total}\n" -H "Content-Type: application/json" --data-binary "@$f" http://api:8000/api/auth/login >> login.out) & done
+  wait'; date +%s.%N
+1795853062.984078365
+
+real	0m17.626s
+user	0m1.558s
+sys	0m1.780s
+1795853080.611389015
+[exit code: 0]
+
+$ cat "$RUN/oom/reg.out" | sort | uniq -c; echo "(reg.out lines: $(wc -l < "$RUN/oom/reg.out"))"
+     40 201
+(reg.out lines: 40)
+[exit code: 0]
+
+$ echo "login.out lines: $(wc -l < "$RUN/oom/login.out")"; cut -d" " -f1 "$RUN/oom/login.out" | sort | uniq -c; cut -d" " -f2 "$RUN/oom/login.out" | sort -n | awk "{a[NR]=\$1} END {print \"seconds p50=\" a[int(NR*0.5+0.5)] \" p95=\" a[int(NR*0.95+0.5)] \" max=\" a[NR]}"
+login.out lines: 40
+     40 200
+seconds p50=5.360788 p95=9.870499 max=9.974495
+[exit code: 0]
+
+$ paste - - < "$RUN/mem.txt"
+1795853062.967398245	86.46MiB / 1GiB
+1795853064.505936581	99.04MiB / 1GiB
+1795853066.508736862	98.39MiB / 1GiB
+1795853068.512098571	107.5MiB / 1GiB
+1795853070.514429022	313.6MiB / 1GiB
+1795853072.517286263	312.2MiB / 1GiB
+1795853074.520590234	307.3MiB / 1GiB
+1795853076.522822258	304MiB / 1GiB
+1795853078.525730113	287.4MiB / 1GiB
+1795853080.529805773	
+[exit code: 0]
+
+$ awk "NR % 2 == 0 {v=\$1; if (v ~ /GiB/) {sub(/GiB/, \"\", v); v *= 1024} else {sub(/MiB/, \"\", v)} if (v+0 > m) m = v+0} END {print \"highest docker-stats sample: \" m \" MiB over \" NR/2 \" samples\"}" "$RUN/mem.txt"
+highest docker-stats sample: 313.6 MiB over 9.5 samples
+[exit code: 0]
+
+$ awk '{ if ($2 > m) m = $2 } END {printf "highest memory.current sample: %.1f MiB over %d samples\n", m/1048576, NR}' "$RUN/mem2.txt"; awk 'NR==1 {f=$1} {l=$1} END {printf "sampling window: %.1f s\n", l-f}' "$RUN/mem2.txt"
+highest memory.current sample: 309.8 MiB over 60 samples
+sampling window: 17.6 s
+[exit code: 0]
+
+$ docker compose exec -T api sh -c "echo memory.max=\$(cat /sys/fs/cgroup/memory.max); echo memory.peak=\$(cat /sys/fs/cgroup/memory.peak); cat /sys/fs/cgroup/memory.events"
+memory.max=1073741824
+memory.peak=334565376
+low 0
+high 0
+max 0
+oom 0
+oom_kill 0
+oom_group_kill 0
+sock_throttled 0
+[exit code: 0]
+
+$ docker inspect -f "{{.State.OOMKilled}} {{.RestartCount}} {{.State.Status}}" patchpoint-final-api-1
+false 0 running
+[exit code: 0]
+
+$ docker inspect -f "ExitCode={{.State.ExitCode}} OOMKilled={{.State.OOMKilled}} StartedAt={{.State.StartedAt}} RestartCount={{.RestartCount}}" patchpoint-final-api-1
+ExitCode=0 OOMKilled=false StartedAt=2026-11-28T08:04:15.368097597Z RestartCount=0
+[exit code: 0]
+
+$ docker events --since 10m --until 0s --filter container=patchpoint-final-api-1 --filter event=oom --filter event=die --filter event=start --format "{{.Time}} {{.Action}} exitCode={{index .Actor.Attributes \"exitCode\"}}"
+1795853055 start exitCode=
+[exit code: 0]
+
+$ docker compose logs --no-color api 2>&1 | grep -E "Started server process|Uvicorn running|Traceback|internal_error|[Kk]illed" | cut -c1-200
+api-1  | INFO:     Started server process [1]
+api-1  | INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+[exit code: 0]
+
+$ docker compose logs --no-color api 2>&1 | grep -c login_succeeded
+40
+[exit code: 0]
+
+$ journalctl -k --since "-10min" --no-pager | grep -cE "oom-killer|Memory cgroup out of memory" || true
+0
+[exit code: 0]
+
+
+## OPS-05 edge a) — 12 parallel wrong logins through the proxy from one IP
+# Input: $RUN/wrong.edge.json = {"username":"qa.final.$SFX.edge","password":"Wrong-Password-12345"} (an unregistered user; the wrong password is a fixed non-secret string)
+
+$ jq -nc --arg u qa.final.$SFX.edge '{username: $u, password: "Wrong-Password-12345"}' > $RUN/wrong.edge.json
+: > $RUN/edge05.jobs
+for n in $(seq -w 1 12); do
+  printf 'j%s\tPOST\t/api/auth/login\t%s\t-\t-\n' $n "$RUN/wrong.edge.json" >> $RUN/edge05.jobs
+done
+wc -l < $RUN/edge05.jobs
+12
+[exit code: 0]
+
+$ BASE=$H; wave edge05; echo "--- out (id, status, seconds, detail, retry-after) ---"; sort "$RUN/edge05.out"; echo "--- summary ---"; summary edge05
+--- out (id, status, seconds, detail, retry-after) ---
+j01	401	0.716795	Invalid username or password	
+j02	401	0.623696	Invalid username or password	
+j03	401	1.003183	Invalid username or password	
+j04	401	0.989382	Invalid username or password	
+j05	429	0.173170	Too many failed login attempts. Try again later.	900
+j06	401	1.085124	Invalid username or password	
+j07	429	0.005434	Too many requests, try again later	
+j08	429	0.006010	Too many requests, try again later	
+j09	429	0.005757	Too many requests, try again later	
+j10	429	0.014094	Too many requests, try again later	
+j11	429	0.032724	Too many requests, try again later	
+j12	429	0.020334	Too many requests, try again later	
+--- summary ---
+      5 401
+      7 429
+      5 Invalid username or password
+      1 Too many failed login attempts. Try again later.
+      6 Too many requests, try again later
+p50=0.032724 p95=1.003183 max=1.085124
+[exit code: 0]
+
+# waiting 65 s after the burst (rate-limit zone patchpoint_auth)
+
+## OPS-09 — SQLite backup per §10
+# Precondition: the OPS-05 data (40 users m01..m40) plus a ticket with one comment by .m01 created through H (session as a header file; a Secure cookie is not kept by curl over http).
+
+$ curl -s --noproxy '*' -m 60 -X POST -H 'Content-Type: application/json' --data-binary "@$RUN/oom/login.qa.final.$SFX.m01.json" -D "$RUN/m01.hdr" -o "$RUN/last.body" -w '%{http_code} %{time_total}\n' "$H/api/auth/login"; tr -d '\r' < "$RUN/m01.hdr" | awk -F'[=;]' 'tolower($1) == "set-cookie: session" {print "Cookie: session=" $2}' > "$RUN/hd.m01"; chmod 600 "$RUN/hd.m01"; echo "cookie header file written: $(wc -c < "$RUN/hd.m01") bytes"; jq -r '.user.username + " " + .user.role' "$RUN/last.body"
+200 0.058309
+cookie header file written: 60 bytes
+qa.final.d1b129.m01 employee
+[exit code: 0]
+
+$ curl -s --noproxy "*" -m 60 -X POST -H "Content-Type: application/json" -H @"$RUN/hd.m01" --data-binary "@$RUN/tk.backup.json" -o "$RUN/tk.out" -w "%{http_code} %{time_total}\n" "$H/api/tickets"; echo "ticket id=$(jq -r .id "$RUN/tk.out") title=$(jq -r .title "$RUN/tk.out")"
+201 0.019727
+ticket id=4 title=backup-marker-d1b129
+[exit code: 0]
+
+$ curl -s --noproxy "*" -m 60 -X POST -H "Content-Type: application/json" -H @"$RUN/hd.m01" --data-binary "@$RUN/cm.backup.json" -o "$RUN/cm.out" -w "%{http_code} %{time_total}\n" "$H/api/tickets/4/comments"; echo "comment id=$(jq -r .id "$RUN/cm.out")"; curl -s --noproxy "*" -m 60 -H @"$RUN/hd.m01" "$H/api/tickets/4" | jq -c "{id, title, comments: (.comments | length)}"
+201 0.014109
+comment id=2
+{"id":4,"title":"backup-marker-d1b129","comments":1}
+[exit code: 0]
+
+$ docker compose exec -T api python -c "import sqlite3; c = sqlite3.connect('file:/data/patchpoint.db?mode=ro', uri=True); print('live journal_mode:', c.execute('PRAGMA journal_mode').fetchone()[0])"
+live journal_mode: wal
+[exit code: 0]
+
+# Step 1: the three commands of docs/faza-3-ops/README.md §10, read from the file (lines 265-267) with two substitutions: ' --project-directory /opt/patchpoint' is dropped (the Setup env block selects the project) and ./patchpoint-$(date +%F).db becomes $RUN/backup/patchpoint.db
+$ sed -n 265,267p docs/faza-3-ops/README.md
+docker compose --project-directory /opt/patchpoint exec -T api python -c "import sqlite3; s = sqlite3.connect('/data/patchpoint.db'); d = sqlite3.connect('/data/backup.db'); s.backup(d); d.execute('PRAGMA journal_mode = DELETE'); d.close(); s.close()"
+docker compose --project-directory /opt/patchpoint cp api:/data/backup.db ./patchpoint-$(date +%F).db
+docker compose --project-directory /opt/patchpoint exec -T api python -c "import os; os.remove('/data/backup.db')"
+[exit code: 0]
+
+$ docker compose exec -T api python -c "import sqlite3; s = sqlite3.connect('/data/patchpoint.db'); d = sqlite3.connect('/data/backup.db'); s.backup(d); d.execute('PRAGMA journal_mode = DELETE'); d.close(); s.close()"
+[exit code: 0]
+
+$ ls -l "$RUN/backup/patchpoint.db" | sed "s#$RUN#\$RUN#"; ls -l "$RUN/backup"
+ls: cannot access '/tmp/pp-final.94OWz5/backup/patchpoint.db': No such file or directory
+total 0
+[exit code: 0]
+
+$ docker compose exec -T api ls -l /data
+total 112
+-rw-r--r-- 1 10001 10001 57344 Nov 28 08:06 backup.db
+-rw-r--r-- 1 10001 10001 57344 Nov 28 08:06 patchpoint.db
+[exit code: 0]
+
+$ docker compose exec -T api python -c "import os; print(\"/data/backup.db exists:\", os.path.exists(\"/data/backup.db\"))"
+/data/backup.db exists: True
+[exit code: 0]
+
+$ sqlite3 "$RUN/backup/patchpoint.db" "PRAGMA integrity_check"
+ok
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/backup/patchpoint.db" "PRAGMA journal_mode"
+delete
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/backup/patchpoint.db" "SELECT 'users', COUNT(*) FROM users UNION ALL SELECT 'tickets', COUNT(*) FROM tickets UNION ALL SELECT 'comments', COUNT(*) FROM comments" | tee "$RUN/cnt.backup"
+Parse error in 3rd command line argument: no such table: comments
+[exit code: 0]
+
+$ docker compose exec -T api python -c "import sqlite3; c = sqlite3.connect('file:/data/patchpoint.db?mode=ro', uri=True); [print(t + '|' + str(c.execute('SELECT COUNT(*) FROM ' + t).fetchone()[0])) for t in ('users', 'tickets', 'comments')]" | tee "$RUN/cnt.live"
+users|43
+tickets|4
+comments|2
+[exit code: 0]
+
+$ diff "$RUN/cnt.backup" "$RUN/cnt.live" && echo "counts equal"
+0a1,3
+> users|43
+> tickets|4
+> comments|2
+[exit code: 1]
+
+$ sqlite3 -readonly "$RUN/backup/patchpoint.db" "SELECT COUNT(*) FROM tickets WHERE title = 'backup-marker-$SFX'"
+Parse error in 3rd command line argument: no such table: tickets
+[exit code: 1]
+
+# The first attempt above ran only the first of the three commands: the loop that executed the lines read them from stdin and docker compose exec consumed the rest (my harness error, not a §10 defect). The leftover /data/backup.db is removed and all three commands are repeated from the start with the lines on a separate file descriptor.
+$ docker compose exec -T api python -c "import os; os.remove(\"/data/backup.db\")"; docker compose exec -T api ls -l /data
+total 88
+-rw-r--r-- 1 10001 10001 57344 Nov 28 08:06 patchpoint.db
+-rw-r--r-- 1 10001 10001 32768 Nov 28 08:06 patchpoint.db-shm
+-rw-r--r-- 1 10001 10001     0 Nov 28 08:06 patchpoint.db-wal
+[exit code: 0]
+
+# Step 1 (repeated): the three §10 commands
+$ docker compose exec -T api python -c "import sqlite3; s = sqlite3.connect('/data/patchpoint.db'); d = sqlite3.connect('/data/backup.db'); s.backup(d); d.execute('PRAGMA journal_mode = DELETE'); d.close(); s.close()"
+[exit code: 0]
+
+$ docker compose cp api:/data/backup.db "$RUN/backup/patchpoint.db"
+ patchpoint-final-api-1 Copying patchpoint-final-api-1:/data/backup.db to /tmp/pp-final.94OWz5/backup/patchpoint.db
+ patchpoint-final-api-1 Copied patchpoint-final-api-1:/data/backup.db to /tmp/pp-final.94OWz5/backup/patchpoint.db
+[exit code: 0]
+
+$ docker compose exec -T api python -c "import os; os.remove('/data/backup.db')"
+[exit code: 0]
+
+$ ls -l "$RUN/backup/patchpoint.db" | sed "s#$RUN#\$RUN#"
+-rw-r--r-- 1 lex lex 57344 Nov 28 09:06 $RUN/backup/patchpoint.db
+[exit code: 0]
+
+$ docker compose exec -T api ls -l /data
+total 56
+-rw-r--r-- 1 10001 10001 57344 Nov 28 08:06 patchpoint.db
+[exit code: 0]
+
+$ docker compose exec -T api python -c "import os; print(\"/data/backup.db exists:\", os.path.exists(\"/data/backup.db\"))"
+/data/backup.db exists: False
+[exit code: 0]
+
+$ sqlite3 "$RUN/backup/patchpoint.db" "PRAGMA integrity_check"
+ok
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/backup/patchpoint.db" "PRAGMA journal_mode"
+delete
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/backup/patchpoint.db" "SELECT 'users', COUNT(*) FROM users UNION ALL SELECT 'tickets', COUNT(*) FROM tickets UNION ALL SELECT 'comments', COUNT(*) FROM comments" | tee "$RUN/cnt.backup"
+users|43
+tickets|4
+comments|2
+[exit code: 0]
+
+$ docker compose exec -T api python -c "import sqlite3; c = sqlite3.connect('file:/data/patchpoint.db?mode=ro', uri=True); [print(t + '|' + str(c.execute('SELECT COUNT(*) FROM ' + t).fetchone()[0])) for t in ('users', 'tickets', 'comments')]" | tee "$RUN/cnt.live"
+users|43
+tickets|4
+comments|2
+[exit code: 0]
+
+$ diff "$RUN/cnt.backup" "$RUN/cnt.live" && echo "counts equal"
+counts equal
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/backup/patchpoint.db" "SELECT COUNT(*) FROM tickets WHERE title = 'backup-marker-$SFX'"
+1
+[exit code: 0]
+
+
+## OPS-10 — restore drill and data persistence
+
+# Step a) down / up with the same volume
+
+$ docker compose ps --format "{{.Name}}"; docker compose down 2>&1 | tail -6; docker volume ls -q --filter name=patchpoint-final_
+patchpoint-final-api-1
+patchpoint-final-proxy-1
+ Container patchpoint-final-api-1 Removing 
+ Container patchpoint-final-api-1 Removed 
+ Network patchpoint-final_backend Removing 
+ Network patchpoint-final_edge Removing 
+ Network patchpoint-final_backend Removed 
+ Network patchpoint-final_edge Removed 
+patchpoint-final_api-data
+[exit code: 0]
+
+$ docker compose up -d --wait --wait-timeout 180 2>&1 | tail -12; docker compose ps
+ Container patchpoint-final-proxy-1 Creating 
+ Container patchpoint-final-proxy-1 Created 
+ Container patchpoint-final-api-1 Starting 
+ Container patchpoint-final-api-1 Started 
+ Container patchpoint-final-api-1 Waiting 
+ Container patchpoint-final-api-1 Healthy 
+ Container patchpoint-final-proxy-1 Starting 
+ Container patchpoint-final-proxy-1 Started 
+ Container patchpoint-final-proxy-1 Waiting 
+ Container patchpoint-final-api-1 Waiting 
+ Container patchpoint-final-api-1 Healthy 
+ Container patchpoint-final-proxy-1 Healthy 
+NAME                       IMAGE                    COMMAND                  SERVICE   CREATED         STATUS                   PORTS
+patchpoint-final-api-1     patchpoint-api:local     "uvicorn app.main:ap…"   api       6 seconds ago   Up 5 seconds (healthy)   8000/tcp
+patchpoint-final-proxy-1   patchpoint-proxy:local   "/docker-entrypoint.…"   proxy     5 seconds ago   Up 2 seconds (healthy)   127.0.0.1:28080->8080/tcp, 127.0.0.1:28443->8443/tcp
+[exit code: 0]
+
+$ docker compose exec -T api python -c "import sqlite3; c = sqlite3.connect('file:/data/patchpoint.db?mode=ro', uri=True); [print(t + '|' + str(c.execute('SELECT COUNT(*) FROM ' + t).fetchone()[0])) for t in ('users', 'tickets', 'comments')]" | tee "$RUN/cnt.after-a"; diff "$RUN/cnt.live" "$RUN/cnt.after-a" && echo "counts unchanged"
+users|43
+tickets|4
+comments|2
+counts unchanged
+[exit code: 0]
+
+$ curl -s --noproxy '*' -m 60 -X POST -H 'Content-Type: application/json' --data-binary "@$RUN/oom/login.qa.final.$SFX.m01.json" -D "$RUN/m01.hdr" -o "$RUN/last.body" -w '%{http_code} %{time_total}\n' "$H/api/auth/login"; tr -d '\r' < "$RUN/m01.hdr" | awk -F'[=;]' 'tolower($1) == "set-cookie: session" {print "Cookie: session=" $2}' > "$RUN/hd.m01"; chmod 600 "$RUN/hd.m01"; echo "cookie header file written: $(wc -c < "$RUN/hd.m01") bytes"; jq -r '.user.username + " " + .user.role' "$RUN/last.body"
+200 0.081189
+cookie header file written: 60 bytes
+qa.final.d1b129.m01 employee
+[exit code: 0]
+
+
+# Step b) a ticket created by .m01 after the backup, then the restore procedure
+
+$ curl -s --noproxy "*" -m 60 -X POST -H "Content-Type: application/json" -H @"$RUN/hd.m01" --data-binary "@$RUN/tk.marker.json" -o "$RUN/tk.out" -w "%{http_code} %{time_total}\n" "$H/api/tickets"; echo "ticket id=$(jq -r .id "$RUN/tk.out") title=$(jq -r .title "$RUN/tk.out")"
+201 0.022500
+ticket id=5 title=restore-marker-d1b129
+[exit code: 0]
+
+$ curl -s --noproxy '*' -m 60 -H @"$RUN/hd.m01" -G --data-urlencode "search=restore-marker-$SFX" -w '%{http_code}\n' -o "$RUN/s.out" "$H/api/tickets"; echo "rows before restore: $(jq length "$RUN/s.out")"
+200
+rows before restore: 1
+[exit code: 0]
+
+$ docker compose exec -T api python -c "import sqlite3; c = sqlite3.connect('file:/data/patchpoint.db?mode=ro', uri=True); [print(t + '|' + str(c.execute('SELECT COUNT(*) FROM ' + t).fetchone()[0])) for t in ('users', 'tickets', 'comments')]" | tee "$RUN/cnt.live"
+users|43
+tickets|5
+comments|2
+[exit code: 0]
+
+# The restore procedure: docs/faza-3-ops/README.md §10, lines 275-281 read from the file, with these substitutions: ' --project-directory /opt/patchpoint' dropped (the Setup env block selects the project), patchpoint_api-data -> patchpoint-final_api-data, /tmp/patchpoint-restore -> $RUN/restore, ./patchpoint-RRRR-MM-DD.db -> $RUN/backup/patchpoint.db
+$ sed -n 275,281p docs/faza-3-ops/README.md
+docker compose --project-directory /opt/patchpoint down
+docker volume rm patchpoint_api-data
+install -d -m 0755 /tmp/patchpoint-restore
+install -m 0644 ./patchpoint-RRRR-MM-DD.db /tmp/patchpoint-restore/patchpoint.db
+docker compose --project-directory /opt/patchpoint run --rm --no-deps -T -v /tmp/patchpoint-restore:/restore:ro --entrypoint python api -c "import shutil; shutil.copyfile('/restore/patchpoint.db', '/data/patchpoint.db')"
+rm -rf /tmp/patchpoint-restore
+docker compose --project-directory /opt/patchpoint up -d --wait --wait-timeout 180
+[exit code: 0]
+
+$ docker compose down
+ Container patchpoint-final-proxy-1 Stopping 
+ Container patchpoint-final-proxy-1 Stopped 
+ Container patchpoint-final-proxy-1 Removing 
+ Container patchpoint-final-proxy-1 Removed 
+ Container patchpoint-final-api-1 Stopping 
+ Container patchpoint-final-api-1 Stopped 
+ Container patchpoint-final-api-1 Removing 
+ Container patchpoint-final-api-1 Removed 
+ Network patchpoint-final_backend Removing 
+ Network patchpoint-final_edge Removing 
+ Network patchpoint-final_backend Removed 
+ Network patchpoint-final_edge Removed 
+[exit code: 0]
+
+$ docker volume rm patchpoint-final_api-data
+patchpoint-final_api-data
+[exit code: 0]
+
+$ install -d -m 0755 $RUN/restore
+[exit code: 0]
+
+$ install -m 0644 "$RUN/backup/patchpoint.db" $RUN/restore/patchpoint.db
+[exit code: 0]
+
+$ docker compose run --rm --no-deps -T -v $RUN/restore:/restore:ro --entrypoint python api -c "import shutil; shutil.copyfile('/restore/patchpoint.db', '/data/patchpoint.db')"
+ Volume patchpoint-final_api-data Creating 
+ Network patchpoint-final_backend Creating 
+ Volume patchpoint-final_api-data Created 
+ Network patchpoint-final_backend Created 
+ Container patchpoint-final-api-run-448a68c649c9 Creating 
+ Container patchpoint-final-api-run-448a68c649c9 Created 
+[exit code: 0]
+
+$ rm -rf $RUN/restore
+[exit code: 0]
+
+$ docker compose up -d --wait --wait-timeout 180
+ Network patchpoint-final_edge Creating 
+ Container patchpoint-final-api-1 Creating 
+ Network patchpoint-final_edge Created 
+ Container patchpoint-final-api-1 Created 
+ Container patchpoint-final-proxy-1 Creating 
+ Container patchpoint-final-proxy-1 Created 
+ Container patchpoint-final-api-1 Starting 
+ Container patchpoint-final-api-1 Started 
+ Container patchpoint-final-api-1 Waiting 
+ Container patchpoint-final-api-1 Healthy 
+ Container patchpoint-final-proxy-1 Starting 
+ Container patchpoint-final-proxy-1 Started 
+ Container patchpoint-final-proxy-1 Waiting 
+ Container patchpoint-final-api-1 Waiting 
+ Container patchpoint-final-api-1 Healthy 
+ Container patchpoint-final-proxy-1 Healthy 
+[exit code: 0]
+
+# Verification after the restore
+$ docker compose exec -T api python -c "import sqlite3; c = sqlite3.connect('file:/data/patchpoint.db?mode=ro', uri=True); [print(t + '|' + str(c.execute('SELECT COUNT(*) FROM ' + t).fetchone()[0])) for t in ('users', 'tickets', 'comments')]" | tee "$RUN/cnt.restored"; diff "$RUN/cnt.backup" "$RUN/cnt.restored" && echo "counts equal the backup counts"; docker compose exec -T api ls -l /data
+users|43
+tickets|4
+comments|2
+counts equal the backup counts
+total 88
+-rw-r--r-- 1 10001 10001 57344 Nov 28 08:07 patchpoint.db
+-rw-r--r-- 1 10001 10001 32768 Nov 28 08:07 patchpoint.db-shm
+-rw-r--r-- 1 10001 10001     0 Nov 28 08:07 patchpoint.db-wal
+[exit code: 0]
+
+$ docker compose exec -T api python -c "import sqlite3; c = sqlite3.connect('file:/data/patchpoint.db?mode=ro', uri=True); print('integrity_check:', c.execute('PRAGMA integrity_check').fetchone()[0]); print('journal_mode:', c.execute('PRAGMA journal_mode').fetchone()[0])"
+integrity_check: ok
+journal_mode: wal
+[exit code: 0]
+
+$ curl -s --noproxy "*" -m 60 -H @"$RUN/hd.m01" -o /dev/null -w "%{http_code}\n" "$H/api/auth/me"   # the m01 session created in step a) is after the backup, so it is gone from the restored database
+401
+[exit code: 0]
+
+$ curl -s --noproxy '*' -m 60 -X POST -H 'Content-Type: application/json' --data-binary "@$RUN/oom/login.qa.final.$SFX.m01.json" -D "$RUN/m01.hdr" -o "$RUN/last.body" -w '%{http_code} %{time_total}\n' "$H/api/auth/login"; tr -d '\r' < "$RUN/m01.hdr" | awk -F'[=;]' 'tolower($1) == "set-cookie: session" {print "Cookie: session=" $2}' > "$RUN/hd.m01"; chmod 600 "$RUN/hd.m01"; echo "cookie header file written: $(wc -c < "$RUN/hd.m01") bytes"; jq -r '.user.username + " " + .user.role' "$RUN/last.body"
+200 0.080947
+cookie header file written: 60 bytes
+qa.final.d1b129.m01 employee
+[exit code: 0]
+
+$ curl -s --noproxy '*' -m 60 -H @"$RUN/hd.m01" -G --data-urlencode "search=restore-marker-$SFX" -w '%{http_code}\n' -o "$RUN/s.out" "$H/api/tickets"; echo "rows for restore-marker-$SFX after restore: $(jq length "$RUN/s.out")"
+200
+rows for restore-marker-d1b129 after restore: 0
+[exit code: 0]
+
+$ curl -s --noproxy '*' -m 60 -H @"$RUN/hd.m01" -G --data-urlencode "search=backup-marker-$SFX" -w '%{http_code}\n' -o "$RUN/s.out" "$H/api/tickets"; echo "rows for backup-marker-$SFX after restore: $(jq length "$RUN/s.out")"
+200
+rows for backup-marker-d1b129 after restore: 1
+[exit code: 0]
+
+$ curl -s --noproxy "*" -m 60 -X POST -H "Content-Type: application/json" --data-binary "@$RUN/oom/login.qa.final.$SFX.m02.json" -o "$RUN/last.body" -w "%{http_code} %{time_total}\n" "$H/api/auth/login"; jq -r ".user.username + \" \" + .user.role" "$RUN/last.body"
+200 0.094109
+qa.final.d1b129.m02 employee
+[exit code: 0]
+
+$ docker compose ps --format "{{.Name}} {{.Status}}"; ls "$RUN/restore" 2>&1
+patchpoint-final-api-1 Up 20 seconds (healthy)
+patchpoint-final-proxy-1 Up 17 seconds (healthy)
+ls: cannot access '/tmp/pp-final.94OWz5/restore': No such file or directory
+[exit code: 2]
+
+
+## Teardown
+
+$ docker compose ps --format "{{.Name}}"
+patchpoint-final-api-1
+patchpoint-final-proxy-1
+[exit code: 0]
+
+$ docker compose down -v 2>&1 | tail -8
+ Container patchpoint-final-api-1 Removing 
+ Container patchpoint-final-api-1 Removed 
+ Volume patchpoint-final_api-data Removing 
+ Network patchpoint-final_edge Removing 
+ Network patchpoint-final_backend Removing 
+ Volume patchpoint-final_api-data Removed 
+ Network patchpoint-final_backend Removed 
+ Network patchpoint-final_edge Removed 
+[exit code: 0]
+
+$ docker ps -a --format "{{.Names}}" | grep -E "^(patchpoint-final-|patchpoint-smoke|pp-ansible-target|pp-verify-)"; echo "leftover containers: $?  (1 = none)"; docker volume ls -q | grep -E "^(patchpoint-final_|pp-ansible-docker$)"; echo "leftover volumes: $?  (1 = none)"; ss -ltn | grep -E ":(1810[0-2]|28080|28443|2222)\b"; echo "listeners on the test ports: $?  (1 = none)"; docker ps --format "{{.Names}}" | sort
+leftover containers: 1  (1 = none)
+leftover volumes: 1  (1 = none)
+listeners on the test ports: 1  (1 = none)
+patchpoint-api-1
+patchpoint-proxy-1
+secure-k8s-aiops-control-plane
+secure-k8s-aiops-worker
+secure-k8s-aiops-worker2
+vina-searxng
+[exit code: 0]
+
+
+## OPS-01 summary lines (from the refreshed docs/faza-3-ops/dowody files)
+
+$ grep -E 'collected|^TOTAL|Total coverage|passed' docs/faza-3-ops/dowody/testy.txt
+collected 148 items
+TOTAL                       601     10    98%
+Required test coverage of 80% reached. Total coverage: 98.34%
+============================= 148 passed in 13.81s =============================
+[exit code: 0]
+
+$ grep -cE '^\[OK\]' docs/faza-3-ops/dowody/smoke-stosu.txt; grep -cE '^\[BŁĄD\]' docs/faza-3-ops/dowody/smoke-stosu.txt || true; grep -E 'NAPRAWIONE|STACK SMOKE|jeden proces' docs/faza-3-ops/dowody/smoke-stosu.txt
+29
+0
+[OK] obraz API uruchamia jeden proces uvicorn także przy WEB_CONCURRENCY=4
+[OK] PoC Fazy 2 w kontenerze API: 22 × [NAPRAWIONE]
+STACK SMOKE ZAKOŃCZONY POWODZENIEM
+[exit code: 0]
+
+$ grep -E 'Bramka|debian|alpine' docs/faza-3-ops/dowody/trivy-obrazy.txt | cut -c1-150
+│ /work/image.tar (debian 13.8)                                                    │   debian   │        0        │
+Bramka Trivy (trivy-image-api): brak znalezisk HIGH i CRITICAL. Wyniki: reports/trivy-image-api.json, reports/trivy-image-api.sarif
+│ /work/image.tar (alpine 3.24.4) │ alpine │        0        │
+Bramka Trivy (trivy-image-proxy): brak znalezisk HIGH i CRITICAL. Wyniki: reports/trivy-image-proxy.json, reports/trivy-image-proxy.sarif
+[exit code: 0]
+
+$ docker image ls --format '{{.Repository}}:{{.Tag}} {{.Size}}' --filter 'reference=patchpoint-*:local'
+patchpoint-api:local 254MB
+patchpoint-proxy:local 158MB
+[exit code: 0]
+
+$ git diff --stat -- docs/faza-3-ops/dowody | cat
+ docs/faza-3-ops/dowody/obrazy.txt      |  4 ++--
+ docs/faza-3-ops/dowody/semgrep.txt     |  2 +-
+ docs/faza-3-ops/dowody/smoke-stosu.txt |  3 ++-
+ docs/faza-3-ops/dowody/testy.txt       | 28 ++++++++++++++--------------
+ 4 files changed, 19 insertions(+), 18 deletions(-)
+[exit code: 0]
+

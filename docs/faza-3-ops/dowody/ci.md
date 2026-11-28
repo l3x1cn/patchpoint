@@ -16,7 +16,30 @@ Zielony przebieg na końcowym stanie gałęzi delivery:
 | Data | 2026-11-19 (utworzony 12:04:21 UTC) |
 | Wynik | `success` |
 
-Przebieg `44520467614` na commicie `26d93eb` to ostatni zapisany przebieg potoku dla dostarczonego stanu. Kolejne commity tej gałęzi (poprawki z przeglądu) zmieniają kod i dokumentację, a ich przebiegi CI nie są opisane w tym pliku.
+Przebieg `44520467614` na commicie `26d93eb` to zielony przebieg gałęzi delivery po poprawce wyjątku Trivy. Kolejne commity tej gałęzi (poprawki z przeglądu) mają własne przebiegi, z których ostatni (`44687538054`, commit `b0330ed`) też zakończył się `success`; stan po scaleniu opisuje część „Przebieg na `main` po scaleniu”.
+
+## Przebieg na `main` po scaleniu
+
+Ostatni przebieg na `main` dla stanu kodu z dostarczonej Fazy 3 (`gh run view 44694936930 --json headSha,jobs`):
+
+| Parametr | Wartość |
+|---|---|
+| Przebieg | https://github.com/l3x1cn/patchpoint/actions/runs/44694936930 |
+| Commit (`headSha`) | `7ceb48c25e609eafdf990699e2235a52d78de77d` (HEAD `main`) |
+| Zdarzenie | `push` na `main` |
+| Data | 2026-11-20 (utworzony 07:26:10 UTC) |
+| Wynik | `success` |
+
+| Job | Wynik | Czas |
+|---|---|---|
+| `quality` | `success` | 0 min 49 s (07:26:13–07:27:02) |
+| `semgrep` | `success` | 0 min 29 s (07:26:13–07:26:42) |
+| `trivy-fs` | `success` | 0 min 37 s (07:26:13–07:26:50) |
+| `ansible` | `success` | 0 min 21 s (07:26:13–07:26:34) |
+| `build` | `success` | 1 min 9 s (07:27:05–07:28:14) |
+| `publish` | `success` | 0 min 45 s (07:28:17–07:29:02) |
+
+W tym przebiegu wykonał się job `publish`: obrazy z artefaktu `images` trafiły do GHCR. Późniejsze przebiegi CI w `gh run list` (2026-11-26) to pull requesty Dependabota i pięć ostatnich kończy się `failure` na bramce Trivy obrazów; w przebiegu 45744575300 przyczyną jest nowa podatność HIGH w `libxml2` obrazu proxy (CVE-2026-86144, poprawka w `2.13.9-r3`), pozostałych czterech logów nie sprawdzano. Poprawki porządkowe z 2026-11-27 (Ansible, wersja 0.3.0, job `scripts` z ShellCheck i actionlint) nie mają jeszcze przebiegu CI.
 
 ## Joby
 

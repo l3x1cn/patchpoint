@@ -62,10 +62,11 @@
     content: |
       # Zarządzane przez Ansible (rola base). Domyślne ExecStop usługi nftables w Debianie wykonuje
       # "nft flush ruleset", co przy zatrzymaniu albo restarcie usługi usunęłoby też reguły Dockera
-      # (NAT i FORWARD) i odcięło kontenery od sieci. Zatrzymanie usuwa tylko tabelę patchpoint_host.
+      # (NAT i FORWARD) i odcięło kontenery od sieci. Zatrzymanie usuwa tylko tabelę patchpoint_host;
+      # myślnik przed poleceniem ignoruje błąd, gdy tabela już nie istnieje.
       [Service]
       ExecStop=
-      ExecStop=/usr/sbin/nft delete table inet patchpoint_host
+      ExecStop=-/usr/sbin/nft delete table inet patchpoint_host
   notify: Przeładuj konfigurację systemd
 
 - name: Zastosuj konfigurację systemd przed uruchomieniem zapory

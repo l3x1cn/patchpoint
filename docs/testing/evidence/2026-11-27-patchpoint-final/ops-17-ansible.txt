@@ -1,0 +1,471 @@
+# OPS-17 — Ansible roles base and docker on a systemd container — 2026-11-28T00:47:19+01:00
+# Head: ed276c030d4091f54e416b8f695a746472a6e607
+# Branch: delivery/patchpoint-final-testing
+# Convention: $RUN = /tmp/pp-final.x38tjn (private temp directory, deleted at the end). Every block is "$ <command>" followed by the real exit code of that command ("[exit code: N]"). Where a command is a pipeline, the exit code shown is that of the whole "bash -c" (last command / pipefail where stated).
+# The private SSH key is never printed. The output of "docker build" in the Preconditions is cut to its last 25 lines (marked below), everything else is verbatim.
+
+## Preconditions
+
+$ cat "$RUN/at/Dockerfile"
+FROM debian:trixie
+ENV container=docker
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends systemd systemd-sysv dbus openssh-server sudo python3 python3-apt ca-certificates iproute2 procps \
+ && rm -rf /var/lib/apt/lists/* \
+ && useradd -m -s /bin/bash admin \
+ && printf 'admin ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/admin && chmod 0440 /etc/sudoers.d/admin \
+ && install -d -m 0700 -o admin -g admin /home/admin/.ssh \
+ && systemctl enable ssh
+COPY --chown=admin:admin --chmod=0600 id_ed25519.pub /home/admin/.ssh/authorized_keys
+STOPSIGNAL SIGRTMIN+3
+CMD ["/sbin/init"]
+[exit code: 0]
+
+$ cat "$RUN/at/inventory.yml" "$RUN/at/site-test.yml"
+---
+patchpoint:
+  hosts:
+    pp-ansible-target:
+      ansible_host: 127.0.0.1
+      ansible_port: 2222
+      ansible_user: admin
+      ansible_ssh_private_key_file: /tmp/pp-final.x38tjn/at/id_ed25519
+      ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes"
+---
+- hosts: patchpoint
+  become: true
+  roles:
+    - base
+    - docker
+[exit code: 0]
+
+$ docker build -t pp-ansible-target:test "$RUN/at" 2>&1 | tail -n 25; exit ${PIPESTATUS[0]}
+# [output cut by tail -n 25: only the last 25 lines of the build log are kept; the exit code shown is that of docker build (PIPESTATUS[0])]
+#6 12.47 Processing triggers for libc-bin (2.41-12+deb13u5) ...
+#6 12.49 Processing triggers for ca-certificates (20250419+deb13u1) ...
+#6 12.49 Updating certificates in /etc/ssl/certs...
+#6 12.82 0 added, 0 removed; done.
+#6 12.82 Running hooks in /etc/ca-certificates/update.d...
+#6 12.82 done.
+#6 12.90 Synchronizing state of ssh.service with SysV service script with /usr/lib/systemd/systemd-sysv-install.
+#6 12.90 Executing: /usr/lib/systemd/systemd-sysv-install enable ssh
+#6 DONE 13.4s
+
+#7 [3/3] COPY --chown=admin:admin --chmod=0600 id_ed25519.pub /home/admin/.ssh/authorized_keys
+#7 DONE 0.1s
+
+#8 exporting to image
+#8 exporting layers
+#8 exporting layers 3.2s done
+#8 exporting manifest sha256:0d0cdefcf7565510792d8060d09d3ceee78cba105b5f5ccdeaf7f107a1be31ee 0.0s done
+#8 exporting config sha256:740ba88a11b501964cbb4e12e2465227ba83fef707acc28a1003628d1acac8aa 0.0s done
+#8 exporting attestation manifest sha256:7e3eb5f37d775408528ec83f3e736d1efa80761c09f8d7f1e8adef4c71d97496 0.0s done
+#8 exporting manifest list sha256:d6c763b6edf92ebf0a11a617c08235ddef82bf5d3f48f15999981d91b8753206 0.0s done
+#8 naming to docker.io/library/pp-ansible-target:test
+#8 naming to docker.io/library/pp-ansible-target:test done
+#8 unpacking to docker.io/library/pp-ansible-target:test
+#8 unpacking to docker.io/library/pp-ansible-target:test 2.8s done
+#8 DONE 6.0s
+[exit code: 0]
+
+$ ssh-keygen -l -f "$RUN/at/id_ed25519.pub"
+256 SHA256:1nFEPWas/LJ/MXi0ALOAKStZmu4SkhCWOLmhuADwVxU lex@icon (ED25519)
+[exit code: 0]
+
+$ docker run -d --name pp-ansible-target --hostname pp-ansible-target --privileged --cgroupns=private -e container=docker --tmpfs /run --tmpfs /run/lock -v pp-ansible-docker:/var/lib/docker -p 127.0.0.1:2222:22 pp-ansible-target:test
+43f270930ff9edf7d23cc236f0a062d51a03b9f127e63fe4f03409e88b92eafc
+[exit code: 0]
+
+# Wait loop (poll 'systemctl is-system-running' every 1 s, at most 120 s): it left the loop after 2 s with state 'degraded'. The only failed unit is systemd-modules-load.service (cause not investigated; it is not a unit of the roles).
+
+$ docker exec pp-ansible-target systemctl is-system-running
+degraded
+[exit code: 1]
+
+$ docker exec pp-ansible-target systemctl --failed --no-legend
+● systemd-modules-load.service loaded failed failed Load Kernel Modules
+[exit code: 0]
+
+$ docker exec pp-ansible-target sh -c '. /etc/os-release; echo $PRETTY_NAME'
+Debian GNU/Linux 13 (trixie)
+[exit code: 0]
+
+$ ssh -p 2222 -i "$RUN/at/id_ed25519" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes -o BatchMode=yes admin@127.0.0.1 "id -un; sudo -n id -un"
+Warning: Permanently added '[127.0.0.1]:2222' (ED25519) to the list of known hosts.
+admin
+root
+[exit code: 0]
+
+## a) Run 1 of the playbook (from deploy/ansible)
+
+$ ANSIBLE_ROLES_PATH=roles ANSIBLE_COLLECTIONS_PATH=.ansible/collections uv run --locked --python 3.13 --project tools ansible-playbook -i "$RUN/at/inventory.yml" "$RUN/at/site-test.yml"
+
+PLAY [patchpoint] **************************************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [pp-ansible-target]
+
+TASK [base : Sprawdź system i konto połączenia] ********************************
+ok: [pp-ansible-target]
+
+TASK [base : Zainstaluj pakiety bazowe] ****************************************
+changed: [pp-ansible-target]
+
+TASK [base : Włącz automatyczne aktualizacje bezpieczeństwa] *******************
+changed: [pp-ansible-target]
+
+TASK [base : Utwardź serwer SSH] ***********************************************
+changed: [pp-ansible-target]
+
+TASK [base : Zapisz reguły zapory hosta] ***************************************
+changed: [pp-ansible-target]
+
+TASK [base : Utwórz katalog drop-inów usługi nftables] *************************
+changed: [pp-ansible-target]
+
+TASK [base : Ogranicz zatrzymywanie nftables do reguł hosta] *******************
+changed: [pp-ansible-target]
+
+TASK [base : Zastosuj konfigurację systemd przed uruchomieniem zapory] *********
+
+RUNNING HANDLER [base : Przeładuj SSH] *****************************************
+changed: [pp-ansible-target]
+
+RUNNING HANDLER [base : Przeładuj konfigurację systemd] ************************
+ok: [pp-ansible-target]
+
+RUNNING HANDLER [base : Przeładuj nftables] ************************************
+changed: [pp-ansible-target]
+
+TASK [base : Włącz zaporę nftables] ********************************************
+changed: [pp-ansible-target]
+
+TASK [docker : Usuń pakiety kolidujące z Docker Engine] ************************
+ok: [pp-ansible-target]
+
+TASK [docker : Dodaj repozytorium Docker Engine] *******************************
+[WARNING]: Module remote_tmp /root/.ansible/tmp did not exist and was created with a mode of 0700, this may cause issues when running as another user. To avoid this, create the remote_tmp dir with the correct permissions manually
+changed: [pp-ansible-target]
+
+TASK [docker : Zainstaluj Docker Engine i Docker Compose] **********************
+changed: [pp-ansible-target]
+
+TASK [docker : Włącz automatyczne aktualizacje pakietów Dockera] ***************
+changed: [pp-ansible-target]
+
+TASK [docker : Skonfiguruj demona Dockera] *************************************
+changed: [pp-ansible-target]
+
+TASK [docker : Włącz usługę Docker] ********************************************
+changed: [pp-ansible-target]
+
+TASK [docker : Zastosuj konfigurację demona Dockera przed wdrożeniem] **********
+
+RUNNING HANDLER [docker : Zrestartuj Dockera] **********************************
+changed: [pp-ansible-target]
+
+PLAY RECAP *********************************************************************
+pp-ansible-target          : ok=19   changed=15   unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+
+[exit code: 0]
+
+## b) Handler order in the output of run 1
+
+$ grep '^RUNNING HANDLER' "$OUT"
+RUNNING HANDLER [base : Przeładuj SSH] *****************************************
+RUNNING HANDLER [base : Przeładuj konfigurację systemd] ************************
+RUNNING HANDLER [base : Przeładuj nftables] ************************************
+RUNNING HANDLER [docker : Zrestartuj Dockera] **********************************
+[exit code: 0]
+
+## c) nftables drop-in
+
+$ docker exec pp-ansible-target systemctl show nftables -p DropInPaths -p ExecStop
+ExecStop={ path=/usr/sbin/nft ; argv[]=/usr/sbin/nft delete table inet patchpoint_host ; ignore_errors=yes ; start_time=[n/a] ; stop_time=[n/a] ; pid=0 ; code=(null) ; status=0/0 }
+DropInPaths=/etc/systemd/system/nftables.service.d/10-patchpoint.conf
+[exit code: 0]
+
+$ docker exec pp-ansible-target cat /etc/systemd/system/nftables.service.d/10-patchpoint.conf
+# Zarządzane przez Ansible (rola base). Domyślne ExecStop usługi nftables w Debianie wykonuje
+# "nft flush ruleset", co przy zatrzymaniu albo restarcie usługi usunęłoby też reguły Dockera
+# (NAT i FORWARD) i odcięło kontenery od sieci. Zatrzymanie usuwa tylko tabelę patchpoint_host;
+# myślnik przed poleceniem ignoruje błąd, gdy tabela już nie istnieje.
+[Service]
+ExecStop=
+ExecStop=-/usr/sbin/nft delete table inet patchpoint_host
+[exit code: 0]
+
+## d) Services and host table
+
+$ docker exec pp-ansible-target systemctl is-active nftables ssh docker
+active
+active
+active
+[exit code: 0]
+
+$ docker exec pp-ansible-target nft list table inet patchpoint_host
+table inet patchpoint_host {
+	chain input {
+		type filter hook input priority filter; policy drop;
+		iif "lo" accept
+		ct state established,related accept
+		ct state invalid drop
+		ip protocol icmp icmp type { destination-unreachable, echo-request, time-exceeded } accept
+		ip6 nexthdr ipv6-icmp icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem, echo-request, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept
+		ip saddr 0.0.0.0/0 tcp dport 22 accept
+		ip6 saddr ::/0 tcp dport 22 accept
+		tcp dport { 80, 443 } accept
+	}
+}
+[exit code: 0]
+
+## e) Docker rules survive an nftables restart
+
+$ docker exec pp-ansible-target sh -c 'N1=$(nft list ruleset | grep -c "chain DOCKER"); echo N1=$N1; test $N1 -gt 0 || { echo "N1 is not greater than 0"; exit 1; }; systemctl restart nftables; echo restart-exit=$?; N2=$(nft list ruleset | grep -c "chain DOCKER"); echo N2=$N2; test $N1 -eq $N2'
+# Warning: table ip nat is managed by iptables-nft, do not touch!
+# Warning: table ip filter is managed by iptables-nft, do not touch!
+# Warning: table ip6 nat is managed by iptables-nft, do not touch!
+N1=14
+restart-exit=0
+# Warning: table ip nat is managed by iptables-nft, do not touch!
+# Warning: table ip filter is managed by iptables-nft, do not touch!
+# Warning: table ip6 nat is managed by iptables-nft, do not touch!
+N2=14
+[exit code: 0]
+
+$ docker exec pp-ansible-target sh -c 'nft list ruleset | grep "chain DOCKER"; nft list tables'
+# Warning: table ip nat is managed by iptables-nft, do not touch!
+# Warning: table ip filter is managed by iptables-nft, do not touch!
+# Warning: table ip6 nat is managed by iptables-nft, do not touch!
+	chain DOCKER {
+	chain DOCKER-FORWARD {
+	chain DOCKER-USER {
+	chain DOCKER {
+	chain DOCKER-BRIDGE {
+	chain DOCKER-CT {
+	chain DOCKER-INTERNAL {
+	chain DOCKER {
+	chain DOCKER-FORWARD {
+	chain DOCKER-USER {
+	chain DOCKER {
+	chain DOCKER-BRIDGE {
+	chain DOCKER-CT {
+	chain DOCKER-INTERNAL {
+table ip nat
+table ip filter
+table ip6 nat
+table ip6 filter
+table inet patchpoint_host
+[exit code: 0]
+
+## f) nftables stop deletes only the host table
+
+$ docker exec pp-ansible-target sh -c 'nft delete table inet patchpoint_host; systemctl stop nftables'
+[exit code: 0]
+
+$ docker exec pp-ansible-target systemctl show -p Result nftables
+Result=success
+[exit code: 0]
+
+$ docker exec pp-ansible-target nft list tables
+table ip nat
+table ip filter
+table ip6 nat
+table ip6 filter
+[exit code: 0]
+
+$ docker exec pp-ansible-target systemctl start nftables
+[exit code: 0]
+
+$ docker exec pp-ansible-target nft list tables
+table ip nat
+table ip filter
+table ip6 nat
+table ip6 filter
+table inet patchpoint_host
+[exit code: 0]
+
+$ docker exec pp-ansible-target systemctl is-active nftables
+active
+[exit code: 0]
+
+## g) sshd -T
+
+$ docker exec pp-ansible-target sshd -T | grep -E '^(permitrootlogin|passwordauthentication|kbdinteractiveauthentication|x11forwarding|allowtcpforwarding|maxauthtries) '
+maxauthtries 3
+permitrootlogin no
+passwordauthentication no
+kbdinteractiveauthentication no
+x11forwarding no
+allowtcpforwarding no
+[exit code: 0]
+
+## h) Firewall seen from outside the target
+
+$ docker exec -d pp-ansible-target python3 -m http.server 8081
+[exit code: 0]
+
+$ docker exec pp-ansible-target ss -ltn
+State  Recv-Q Send-Q Local Address:Port Peer Address:Port
+LISTEN 0      128          0.0.0.0:22        0.0.0.0:*   
+LISTEN 0      5            0.0.0.0:8081      0.0.0.0:*   
+LISTEN 0      128             [::]:22           [::]:*   
+[exit code: 0]
+
+$ docker exec pp-ansible-target python3 -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8081/', timeout=5).status)"
+200
+[exit code: 0]
+
+$ docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' pp-ansible-target
+172.17.0.3
+[exit code: 0]
+
+$ docker run --rm alpine:3.24 sh -c 'nc -z -w 3 172.17.0.3 8081; echo "8081:$?"; nc -z -w 3 172.17.0.3 22; echo "22:$?"'
+Unable to find image 'alpine:3.24' locally
+3.24: Pulling from library/alpine
+881fc932939e: Pulling fs layer
+881fc932939e: Already exists
+86ff264fe568: Download complete
+c35a7d82b8fa: Download complete
+Digest: sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
+Status: Downloaded newer image for alpine:3.24
+8081:1
+22:0
+[exit code: 0]
+
+## i) apt configuration
+
+$ docker exec pp-ansible-target cat /etc/apt/apt.conf.d/20auto-upgrades
+// Zarządzane przez Ansible (rola base).
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+[exit code: 0]
+
+$ docker exec pp-ansible-target cat /etc/apt/apt.conf.d/52patchpoint-docker
+// Zarządzane przez Ansible (rola docker). Domyślne listy unattended-upgrades obejmują tylko archiwa
+// dystrybucji, więc bez tego wpisu Docker Engine, containerd i runc z download.docker.com nie
+// dostawałyby poprawek po instalacji. Dopisuje źródło do listy z 50unattended-upgrades (operator ::).
+// live-restore (daemon.json) utrzymuje kontenery przy restarcie demona po aktualizacji.
+Unattended-Upgrade::Origins-Pattern:: "origin=Docker,label=Docker CE";
+[exit code: 0]
+
+$ docker exec pp-ansible-target apt-config dump | grep -F 'origin=Docker,label=Docker CE'
+Unattended-Upgrade::Origins-Pattern:: "origin=Docker,label=Docker CE";
+[exit code: 0]
+
+$ docker exec pp-ansible-target apt-config dump | grep -E 'Periodic::(Update-Package-Lists|Unattended-Upgrade)'
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+[exit code: 0]
+
+$ docker exec pp-ansible-target journalctl -u docker --no-pager -p warning
+-- No entries --
+[exit code: 0]
+
+$ docker exec pp-ansible-target journalctl -u docker --no-pager | grep -iE 'storage|cgroup|overlay|error' ; true
+Nov 27 23:48:41 pp-ansible-target dockerd[1982]: time="2026-11-27T23:48:41.968769637Z" level=info msg="loaded extension" extension=org.mobyproject.storage.bbolt.v0 origin=builtin providers="[org.mobyproject.extension.storage.kv.v0]"
+Nov 27 23:48:42 pp-ansible-target dockerd[1982]: time="2026-11-27T23:48:42.011564654Z" level=info msg="Deleting nftables IPv4 rules" error="running nft: /dev/stdin:1:17-30: Error: Could not process rule: No such file or directory\ndelete table ip docker-bridges\n                ^^^^^^^^^^^^^^\n exit status 1"
+Nov 27 23:48:42 pp-ansible-target dockerd[1982]: time="2026-11-27T23:48:42.017555071Z" level=info msg="Deleting nftables IPv6 rules" error="running nft: /dev/stdin:1:18-31: Error: Could not process rule: No such file or directory\ndelete table ip6 docker-bridges\n                 ^^^^^^^^^^^^^^\n exit status 1"
+Nov 27 23:48:42 pp-ansible-target dockerd[1982]: time="2026-11-27T23:48:42.195070851Z" level=info msg="Docker daemon" commit=54cd494 containerd-snapshotter=true storage-driver=overlayfs version=29.10.1
+Nov 27 23:48:42 pp-ansible-target dockerd[1982]: time="2026-11-27T23:48:42.683381712Z" level=info msg="stopping event stream following graceful shutdown" error="grpc: the client connection is closing: context canceled" module=libcontainerd namespace=moby
+Nov 27 23:48:42 pp-ansible-target dockerd[2183]: time="2026-11-27T23:48:42.731258147Z" level=info msg="loaded extension" extension=org.mobyproject.storage.bbolt.v0 origin=builtin providers="[org.mobyproject.extension.storage.kv.v0]"
+Nov 27 23:48:42 pp-ansible-target dockerd[2183]: time="2026-11-27T23:48:42.753734521Z" level=info msg="Deleting nftables IPv4 rules" error="running nft: /dev/stdin:1:17-30: Error: Could not process rule: No such file or directory\ndelete table ip docker-bridges\n                ^^^^^^^^^^^^^^\n exit status 1"
+Nov 27 23:48:42 pp-ansible-target dockerd[2183]: time="2026-11-27T23:48:42.760789300Z" level=info msg="Deleting nftables IPv6 rules" error="running nft: /dev/stdin:1:18-31: Error: Could not process rule: No such file or directory\ndelete table ip6 docker-bridges\n                 ^^^^^^^^^^^^^^\n exit status 1"
+Nov 27 23:48:43 pp-ansible-target dockerd[2183]: time="2026-11-27T23:48:43.187300461Z" level=info msg="Docker daemon" commit=54cd494 containerd-snapshotter=true storage-driver=overlayfs version=29.10.1
+[exit code: 0]
+
+$ docker exec pp-ansible-target docker info --format '{{.Driver}} {{.CgroupVersion}} {{.CgroupDriver}} {{.ServerVersion}}'
+overlayfs 2 systemd 29.10.1
+[exit code: 0]
+
+$ docker exec pp-ansible-target docker version --format '{{.Server.Version}}'
+29.10.1
+[exit code: 0]
+
+## j) Run 2 of the playbook (from deploy/ansible)
+
+$ ANSIBLE_ROLES_PATH=roles ANSIBLE_COLLECTIONS_PATH=.ansible/collections uv run --locked --python 3.13 --project tools ansible-playbook -i "$RUN/at/inventory.yml" "$RUN/at/site-test.yml"
+
+PLAY [patchpoint] **************************************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [pp-ansible-target]
+
+TASK [base : Sprawdź system i konto połączenia] ********************************
+ok: [pp-ansible-target]
+
+TASK [base : Zainstaluj pakiety bazowe] ****************************************
+ok: [pp-ansible-target]
+
+TASK [base : Włącz automatyczne aktualizacje bezpieczeństwa] *******************
+ok: [pp-ansible-target]
+
+TASK [base : Utwardź serwer SSH] ***********************************************
+ok: [pp-ansible-target]
+
+TASK [base : Zapisz reguły zapory hosta] ***************************************
+ok: [pp-ansible-target]
+
+TASK [base : Utwórz katalog drop-inów usługi nftables] *************************
+ok: [pp-ansible-target]
+
+TASK [base : Ogranicz zatrzymywanie nftables do reguł hosta] *******************
+ok: [pp-ansible-target]
+
+TASK [base : Zastosuj konfigurację systemd przed uruchomieniem zapory] *********
+
+TASK [base : Włącz zaporę nftables] ********************************************
+ok: [pp-ansible-target]
+
+TASK [docker : Usuń pakiety kolidujące z Docker Engine] ************************
+ok: [pp-ansible-target]
+
+TASK [docker : Dodaj repozytorium Docker Engine] *******************************
+ok: [pp-ansible-target]
+
+TASK [docker : Zainstaluj Docker Engine i Docker Compose] **********************
+ok: [pp-ansible-target]
+
+TASK [docker : Włącz automatyczne aktualizacje pakietów Dockera] ***************
+ok: [pp-ansible-target]
+
+TASK [docker : Skonfiguruj demona Dockera] *************************************
+ok: [pp-ansible-target]
+
+TASK [docker : Włącz usługę Docker] ********************************************
+ok: [pp-ansible-target]
+
+TASK [docker : Zastosuj konfigurację demona Dockera przed wdrożeniem] **********
+
+PLAY RECAP *********************************************************************
+pp-ansible-target          : ok=15   changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+
+[exit code: 0]
+
+## Teardown
+
+$ docker rm -f pp-ansible-target
+pp-ansible-target
+[exit code: 0]
+
+$ docker volume rm pp-ansible-docker
+pp-ansible-docker
+[exit code: 0]
+
+$ docker rmi pp-ansible-target:test
+Untagged: pp-ansible-target:test
+Deleted: sha256:d6c763b6edf92ebf0a11a617c08235ddef82bf5d3f48f15999981d91b8753206
+[exit code: 0]
+
+$ docker ps -a --format "{{.Names}}" | grep -E "^(pp-ansible-target|patchpoint-final-|patchpoint-smoke|pp-verify-)"; echo "grep-exit=${PIPESTATUS[1]}"
+grep-exit=1
+[exit code: 0]
+
+$ docker volume ls -q | grep -E "^(pp-ansible-docker$|patchpoint-final_)"; echo "grep-exit=${PIPESTATUS[1]}"
+grep-exit=1
+[exit code: 0]
+
+$ ss -ltn | grep -E ":2222\b"; echo "grep-exit=${PIPESTATUS[1]}"
+grep-exit=1
+[exit code: 0]
+

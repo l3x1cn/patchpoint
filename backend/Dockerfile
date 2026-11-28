@@ -41,4 +41,6 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --start-interval=2s -
     CMD ["python", "-c", "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4).status == 200 else 1)"]
 # X-Forwarded-For jest przyjmowany tylko od adresów z FORWARDED_ALLOW_IPS (bez zmiennej: 127.0.0.1 i ::1);
 # compose.yaml wpisuje tam wyłącznie adres reverse proxy.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-server-header"]
+# Jeden proces z jedną pętlą zdarzeń: blokada logowania i zapisy SQLite tego wymagają (backend/app/routers/auth.py),
+# a uvicorn czyta WEB_CONCURRENCY jako liczbę workerów. --workers w poleceniu ma pierwszeństwo przed WEB_CONCURRENCY.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-server-header"]

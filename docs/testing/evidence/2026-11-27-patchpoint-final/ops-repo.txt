@@ -1,0 +1,514 @@
+# OPS-11 – OPS-16 — repository, supply chain and static Ansible checks — 2026-11-28T00:36:50+01:00
+# Head: cb1bf735664e0f9b1909b4feda4b13cfac3478fe
+# Branch: delivery/patchpoint-final-testing
+# Convention: $RUN = /tmp/pp-final.Qfwisf (private temp directory, deleted at the end), $SFX = 536d0a. No stack or API instance is used by these scenarios.
+# Every block is "$ <command>" followed by the real exit code of that command ("[exit code: N]"). Where a command is a pipeline, the exit code shown is that of the last command unless the block says otherwise.
+
+## OPS-11
+
+$ docker pull zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+docker.io/zricethezav/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f: Pulling from zricethezav/gitleaks
+Digest: sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+Status: Image is up to date for zricethezav/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+docker.io/zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+[exit code: 0]
+
+$ docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/repo:ro" -v "$RUN/gl:/out" zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f git --log-opts=--all --redact --report-format json --report-path /out/gitleaks.json /repo
+
+    ○
+    │╲
+    │ ○
+    ○ ░
+    ░    gitleaks
+
+[90m11:36PM[0m [32mINF[0m [1m47 commits scanned.[0m
+[90m11:36PM[0m [32mINF[0m [1mscanned ~1912203 bytes (1.91 MB) in 626ms[0m
+[90m11:36PM[0m [33mWRN[0m [1mleaks found: 2[0m
+[exit code: 1]
+
+$ printf "%s" password123 | md5sum | cut -d" " -f1
+482c811da5d5b4bc6d497ffa98491e38
+[exit code: 0]
+
+$ jq -c '.[] | {RuleID, File, Commit: .Commit[0:7], StartLine, Match, Secret}' "$RUN/gl/gitleaks.json"
+{"RuleID":"generic-api-key","File":"backend/tests/test_database.py","Commit":"2ec8789","StartLine":41,"Match":"password123\", \"REDACTED\"","Secret":"REDACTED"}
+{"RuleID":"generic-api-key","File":"docs/plans/2026-11-16-faza-2-sec.md","Commit":"8eb6141","StartLine":606,"Match":"password123\", \"REDACTED\"","Secret":"REDACTED"}
+[exit code: 0]
+
+$ git show 2ec8789:backend/tests/test_database.py | sed -n 40,41p
+def test_legacy_md5_hash_is_rejected() -> None:
+    assert not verify_password("password123", "482c811da5d5b4bc6d497ffa98491e38")
+[exit code: 0]
+
+$ git show 8eb6141:docs/plans/2026-11-16-faza-2-sec.md | sed -n 606p
+  - `test_legacy_md5_hash_is_rejected` — `verify_password("password123", "482c811da5d5b4bc6d497ffa98491e38")` daje `False`;
+[exit code: 0]
+
+$ grep -nE 'gitleaks|trufflehog' .github/workflows/ci.yml scripts/scan.sh
+[exit code: 1]
+
+$ git log --all --format=%h -- .av/secrets.local.env .api.env .env deploy/ansible/inventory.yml deploy/ansible/group_vars/patchpoint/vault.yml
+[exit code: 0]
+
+$ gh repo view --json visibility --jq .visibility
+PUBLIC
+[exit code: 0]
+
+$ cp "$RUN/gl/gitleaks.json" "$EVD/gitleaks.json" && jq length "$EVD/gitleaks.json"
+2
+[exit code: 0]
+
+## OPS-12
+
+$ docker pull checkmarx/kics:v2.2.1@sha256:49ccc54b6ae7f5d5fc95e96f8f95c18c57f3bba047ab611a03d80792bdff6757
+docker.io/checkmarx/kics@sha256:49ccc54b6ae7f5d5fc95e96f8f95c18c57f3bba047ab611a03d80792bdff6757: Pulling from checkmarx/kics
+… [56 lines omitted: per-layer pull progress]
+Digest: sha256:49ccc54b6ae7f5d5fc95e96f8f95c18c57f3bba047ab611a03d80792bdff6757
+Status: Downloaded newer image for checkmarx/kics@sha256:49ccc54b6ae7f5d5fc95e96f8f95c18c57f3bba047ab611a03d80792bdff6757
+docker.io/checkmarx/kics:v2.2.1@sha256:49ccc54b6ae7f5d5fc95e96f8f95c18c57f3bba047ab611a03d80792bdff6757
+[exit code: 0]
+
+$ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/path:ro" -v "$RUN/kics:/out" checkmarx/kics:v2.2.1@sha256:49ccc54b6ae7f5d5fc95e96f8f95c18c57f3bba047ab611a03d80792bdff6757 scan -p /path/compose.yaml,/path/backend/Dockerfile,/path/deploy/proxy/Dockerfile,/path/deploy/ansible,/path/.github/workflows --exclude-paths /path/deploy/ansible/tools,/path/deploy/ansible/.ansible -o /out --output-name kics --report-formats json --ignore-on-exit results
+… [22 lines omitted: KICS ASCII-art banner]
+Scanning with Keeping Infrastructure as Code Secure v2.2.1
+
+
+… [1 line omitted: terminal progress bar "Preparing Scan Assets … Executing queries …" up to 100%]
+
+
+[38;2;91;192;222mShared Volumes Between Containers[0m, Severity: [38;2;91;192;222mINFO[0m, Results: 1
+[1mDescription:[0m Volumes shared between containers can cause data corruption or can be used to share malicious files between containers.
+[1mPlatform:[0m DockerCompose
+[1mCWE:[0m 693
+[1mRisk Score:[0m 0.0
+[1mLearn more about this vulnerability:[0m https://docs.kics.io/latest/queries/dockercompose-queries/8c978947-0ff6-485c-b0c2-0bfca6026466
+
+	[38;2;91;192;222m[1]:[0m ../../path/compose.yaml:[38;2;34;187;51m32[0m
+
+		031:     volumes:
+[38;2;240;173;78m		032:       - api-data:/data
+[0m		033:       - type: tmpfs
+
+
+[38;2;237;213;126mLogging of Sensitive Data In Defaults[0m, Severity: [38;2;237;213;126mLOW[0m, Results: 1
+[1mDescription:[0m To keep sensitive values out of logs, tasks that expose them need to be marked defining 'no_log' and setting to True
+[1mPlatform:[0m Ansible
+[1mCWE:[0m 532
+[1mRisk Score:[0m 4.1
+[1mLearn more about this vulnerability:[0m https://docs.kics.io/latest/queries/ansible-queries/c6473dae-8477-4119-88b7-b909b435ce7b
+
+	[38;2;237;213;126m[1]:[0m ../../path/deploy/ansible/ansible.cfg:[38;2;34;187;51m2[0m
+
+		001: # Konfiguracja Ansible dla deploy/ansible (uruchamiaj z tego katalogu).
+[38;2;240;173;78m		002: [defaults]
+[0m		003: inventory = inventory.yml
+
+
+[38;2;255;114;19mHealthcheck Not Set[0m, Severity: [38;2;255;114;19mMEDIUM[0m, Results: 2
+[1mDescription:[0m Check containers periodically to see if they are running properly.
+[1mPlatform:[0m DockerCompose
+[1mCWE:[0m 703
+[1mRisk Score:[0m 5.1
+[1mLearn more about this vulnerability:[0m https://docs.kics.io/latest/queries/dockercompose-queries/698ed579-b239-4f8f-a388-baa4bcb13ef8
+
+	[38;2;255;114;19m[1]:[0m ../../path/compose.yaml:[38;2;34;187;51m18[0m
+
+		017: services:
+[38;2;240;173;78m		018:   api:
+[0m		019:     image: ${PATCHPOINT_API_IMAGE:-patchpoint-api:local}
+
+
+	[38;2;255;114;19m[2]:[0m ../../path/compose.yaml:[38;2;34;187;51m49[0m
+
+		048: 
+[38;2;240;173;78m		049:   proxy:
+[0m		050:     image: ${PATCHPOINT_PROXY_IMAGE:-patchpoint-proxy:local}
+
+
+
+Results Summary:
+[38;2;255;0;0mCRITICAL[0m: 0
+[38;2;187;33;36mHIGH[0m: 0
+[38;2;255;114;19mMEDIUM[0m: 2
+[38;2;237;213;126mLOW[0m: 1
+[38;2;91;192;222mINFO[0m: 1
+TOTAL: 4
+
+Generating Reports: Done
+[exit code: 0]
+
+$ jq '{kics_version, files_scanned, files_parsed, lines_scanned, queries_total, queries_failed_to_execute, total_counter, severity_counters}' "$RUN/kics/kics.json"
+{
+  "kics_version": "v2.2.1",
+  "files_scanned": 14,
+  "files_parsed": 14,
+  "lines_scanned": 787,
+  "queries_total": 675,
+  "queries_failed_to_execute": 0,
+  "total_counter": 4,
+  "severity_counters": {
+    "CRITICAL": 0,
+    "HIGH": 0,
+    "INFO": 1,
+    "LOW": 1,
+    "MEDIUM": 2,
+    "TRACE": 0
+  }
+}
+[exit code: 0]
+
+$ jq -r '.queries[] | select(.severity == "HIGH" or .severity == "MEDIUM" or .severity == "CRITICAL") | .severity as $s | .query_name as $q | .files[] | [$s, $q, (.file_name | sub("^(\\.\\./)+path/"; "")), .line, .search_key] | @tsv' "$RUN/kics/kics.json"
+MEDIUM	Healthcheck Not Set	compose.yaml	18	services.api
+MEDIUM	Healthcheck Not Set	compose.yaml	49	services.proxy
+[exit code: 0]
+
+$ grep -nE 'kics|checkov' .github/workflows/ci.yml
+[exit code: 1]
+
+$ grep -n 'api-data' compose.yaml
+5:#   wyjścia do Internetu), z bazą SQLite na wolumenie api-data.
+32:      - api-data:/data
+93:  api-data: {}
+[exit code: 0]
+
+$ grep -n -E '^HEALTHCHECK' backend/Dockerfile deploy/proxy/Dockerfile
+backend/Dockerfile:40:HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --start-interval=2s --retries=3 \
+deploy/proxy/Dockerfile:60:HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --start-interval=2s --retries=3 \
+[exit code: 0]
+
+$ grep -n 'no_log' deploy/ansible/roles/patchpoint/tasks/main.yml
+60:  no_log: true
+101:  no_log: true
+[exit code: 0]
+
+## OPS-13
+
+$ docker pull semgrep/semgrep:1.185.0@sha256:67518c174185a2043fdbed16c70631b79209499b3671178e7194379b48295a0d
+docker.io/semgrep/semgrep@sha256:67518c174185a2043fdbed16c70631b79209499b3671178e7194379b48295a0d: Pulling from semgrep/semgrep
+Digest: sha256:67518c174185a2043fdbed16c70631b79209499b3671178e7194379b48295a0d
+Status: Image is up to date for semgrep/semgrep@sha256:67518c174185a2043fdbed16c70631b79209499b3671178e7194379b48295a0d
+docker.io/semgrep/semgrep:1.185.0@sha256:67518c174185a2043fdbed16c70631b79209499b3671178e7194379b48295a0d
+[exit code: 0]
+
+$ docker run --rm --network none --user "$(id -u):$(id -g)" -e HOME=/tmp -e SEMGREP_SEND_METRICS=off -v "$PWD:/src:ro" -v "$RUN/sg:/reports" -w /src semgrep/semgrep:1.185.0@sha256:67518c174185a2043fdbed16c70631b79209499b3671178e7194379b48295a0d semgrep scan --metrics=off --error --config p/python --config p/javascript --config p/dockerfile --config p/docker-compose --config p/github-actions --config p/owasp-top-ten --json-output=/reports/semgrep.json .
+HTTPSConnectionPool(host='semgrep.dev', port=443): Max retries exceeded with url: /c/p/python (Caused by NameResolutionError("HTTPSConnection(host='semgrep.dev', port=443): Failed to resolve 'semgrep.dev' ([Errno -3] Try again)"))
+… [112 lines omitted: Python traceback (socket.gaierror → urllib3.NameResolutionError → requests.ConnectionError) through semgrep/commands/scan.py, run_scan.py and config_resolver.py (load_config → _download_config_from_url); the verdict-deciding first and last lines stay]
+requests.exceptions.ConnectionError: HTTPSConnectionPool(host='semgrep.dev', port=443): Max retries exceeded with url: /c/p/python (Caused by NameResolutionError("HTTPSConnection(host='semgrep.dev', port=443): Failed to resolve 'semgrep.dev' ([Errno -3] Try again)"))
+[exit code: 2]
+
+$ ls -l "$RUN/sg"
+total 0
+[exit code: 0]
+
+## OPS-14
+
+$ grep -nE '^FROM' backend/Dockerfile deploy/proxy/Dockerfile
+backend/Dockerfile:6:FROM ghcr.io/astral-sh/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab281fdb225fd82d8ce6d66a81254bac85 AS uv
+backend/Dockerfile:8:FROM python:3.14.10-slim@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f AS build
+backend/Dockerfile:20:FROM python:3.14.10-slim@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f
+deploy/proxy/Dockerfile:7:FROM owasp/modsecurity-crs:4.30.0-nginx-alpine-202611271111@sha256:e473af8dcd3ef1ecb9ad61622c0a1dc82a61b3db7844fdd500de228244e0e25f AS ui
+deploy/proxy/Dockerfile:20:FROM owasp/modsecurity-crs:4.30.0-nginx-alpine-202611271111@sha256:e473af8dcd3ef1ecb9ad61622c0a1dc82a61b3db7844fdd500de228244e0e25f
+[exit code: 0]
+
+$ grep -nE '_IMAGE="' scripts/scan.sh
+20:SEMGREP_IMAGE="semgrep/semgrep:1.185.0@sha256:67518c174185a2043fdbed16c70631b79209499b3671178e7194379b48295a0d"
+21:TRIVY_IMAGE="aquasec/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb"
+22:SHELLCHECK_IMAGE="koalaman/shellcheck:v0.11.0@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d"
+23:ACTIONLINT_IMAGE="rhysd/actionlint:1.7.7@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9"
+[exit code: 0]
+
+$ grep -nE 'uses:' .github/workflows/ci.yml
+47:      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+50:      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+66:      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+73:        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+83:      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+90:        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+100:      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+103:      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+114:      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+127:      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+161:      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+168:        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+185:      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+[exit code: 0]
+
+$ grep -nvE '^[[:space:]]*(#|$)' .trivyignore
+[exit code: 1]
+
+$ grep -nvE '^[[:space:]]*(#|$)' .trivyignore | wc -l
+0
+[exit code: 0]
+
+$ grep -nE '^FROM' backend/Dockerfile deploy/proxy/Dockerfile | grep -vc '@sha256:'
+0
+[exit code: 1]
+
+$ grep -E '_IMAGE="' scripts/scan.sh | grep -vc '@sha256:'
+0
+[exit code: 1]
+
+$ grep -E 'uses:' .github/workflows/ci.yml | grep -vcE '@[0-9a-f]{40} # v'
+0
+[exit code: 1]
+
+$ cat .trivyignore
+# Wyjątki bramki Trivy (scripts/scan.sh). Wpis tylko wtedy, gdy znaleziska nie da się dziś usunąć z kodu,
+# zależności ani obrazu. Nad wpisem komentarz: „<pakiet lub plik>: <dlaczego bez poprawki>; <co ogranicza
+# ryzyko>”. Wpis kończy się datą przeglądu exp:RRRR-MM-DD, najwyżej 30 dni od dodania; po tej dacie Trivy
+# znów zgłasza znalezisko. Każdy wpis ma też wiersz w docs/faza-3-ops/dowody/triaz-skanow.md.
+
+# Brak aktywnych wyjątków. Nowy wpis dodawaj tylko wtedy, gdy znaleziska nie da się usunąć przez przebudowę
+# obrazu bez cache (backend/Dockerfile robi apt-get upgrade, więc lokalna warstwa z cache potrafi zawierać
+# starsze pakiety niż świeża budowa) ani przez nowszy obraz bazowy.
+[exit code: 0]
+
+$ grep -nE '^\s*schedule:' .github/workflows/ci.yml
+[exit code: 1]
+
+$ grep -niE 'sbom|syft|cosign|attest' .github/workflows/ci.yml
+[exit code: 1]
+
+$ curl -s --noproxy '*' -m 30 -w '\nHTTP %{http_code}\n' 'https://ghcr.io/token?scope=repository:l3x1cn/patchpoint/api:pull'
+{"errors":[{"code":"UNAUTHORIZED","message":"authentication required"}]}
+
+HTTP 401
+[exit code: 0]
+
+$ curl -s --noproxy '*' -m 30 'https://ghcr.io/token?scope=repository:l3x1cn/patchpoint/api:pull' | jq 'keys'
+[
+  "errors"
+]
+[exit code: 0]
+
+$ gh run view 44694936930 --json conclusion,status,headBranch,headSha,event,createdAt,jobs --jq '{conclusion,status,headBranch,headSha,event,createdAt,jobs:[.jobs[]|{databaseId,name,conclusion}]}'
+{"conclusion":"success","createdAt":"2026-11-20T07:26:10Z","event":"push","headBranch":"main","headSha":"7ceb48c25e609eafdf990699e2235a52d78de77d","jobs":[{"conclusion":"success","databaseId":136149322779,"name":"ansible"},{"conclusion":"success","databaseId":136149323065,"name":"trivy-fs"},{"conclusion":"success","databaseId":136149323095,"name":"quality"},{"conclusion":"success","databaseId":136149323135,"name":"semgrep"},{"conclusion":"success","databaseId":136149668126,"name":"build"},{"conclusion":"success","databaseId":136150145480,"name":"publish"}],"status":"completed"}
+[exit code: 0]
+
+$ ( set -o pipefail; gh run view 44694936930 --job 136150145480 --log | grep -E 'digest: sha256:' )
+publish	UNKNOWN STEP	2026-11-20T07:28:45.1196184Z sha-7ceb48c: digest: sha256:f6c2a2581f26b06f99b08e10ebc5dae50e3ed82e0d01c7b26708ccb1b08c125d size: 2205
+publish	UNKNOWN STEP	2026-11-20T07:28:58.3763733Z sha-7ceb48c: digest: sha256:cf65b3da8ad58cfdae5f1d52db55de7bbaea6372e7f5a9b422b55a92016d8014 size: 6773
+[exit code: 0]
+
+## OPS-15
+
+$ gh repo view --json visibility --jq .visibility
+PUBLIC
+[exit code: 0]
+
+$ sed -n 11,16p .github/workflows/ci.yml
+#    packages: write i nie wykonuje kodu z repozytorium.
+# Joby wołają cele make, które działają też lokalnie. Akcje są przypięte po pełnym SHA commita z komentarzem
+# wersji (podbija je Dependabot); skanery działają z obrazów przypiętych po digeście (scripts/scan.sh), bez
+# akcji Trivy z Marketplace (CVE-2026-33634). Repozytorium jest prywatne bez GitHub Advanced Security, więc
+# SARIF trafia do artefaktów, nie do code scanning. Wartości z kontekstów GitHuba trafiają do poleceń
+# wyłącznie przez env, nigdy przez wyrażenia w treści run.
+[exit code: 0]
+
+$ sed -n 319p docs/faza-3-ops/README.md | cut -c1-2000
+- Tagi `sha-<7>` w GHCR są zmienne: ponowne uruchomienie przebiegu dla tego samego commita buduje obraz od nowa (`apt-get upgrade` zależy od dnia budowy) i nadpisuje tag, a każdy, kto ma `packages: write`, może go podmienić. Job `publish` zapisuje digesty wysłanych obrazów w podsumowaniu przebiegu, a rola `patchpoint` wdraża po digeście, gdy podano `patchpoint_api_digest` i `patchpoint_proxy_digest`; bez nich (wariant po tagu) serwer nie sprawdza, że obraz jest tym, który przeszedł bramki, a wycofanie po tagu może uruchomić inny obraz. Odczyt digestu przez `docker buildx imagetools inspect` w `publish` i wdrożenie po digeście nie zostały sprawdzone na GHCR ani na serwerze (publikacja możliwa dopiero po scaleniu do `main`). Podpis cosign obrazów i jego weryfikacja przed wdrożeniem nie są wdrożone.
+[exit code: 0]
+
+$ sed -n 328p docs/faza-3-ops/README.md
+- Publikacja w GHCR (`publish`) zostanie sprawdzona dopiero po scaleniu do `main`.
+[exit code: 0]
+
+$ gh run view 44694936930 --json jobs --jq '.jobs[] | select(.name == "publish") | {name, conclusion}'
+{"conclusion":"success","name":"publish"}
+[exit code: 0]
+
+$ git ls-files docs/testing/plans/2026-11-27-patchpoint-phase-3-ops-test-plan.md docs/testing/reports/2026-11-27-patchpoint-phase-3-ops-report.md
+docs/testing/plans/2026-11-27-patchpoint-phase-3-ops-test-plan.md
+docs/testing/reports/2026-11-27-patchpoint-phase-3-ops-report.md
+[exit code: 0]
+
+$ grep -n 44694936930 docs/faza-3-ops/dowody/ci.md
+23:Ostatni przebieg na `main` dla stanu kodu z dostarczonej Fazy 3 (`gh run view 44694936930 --json headSha,jobs`):
+27:| Przebieg | https://github.com/l3x1cn/patchpoint/actions/runs/44694936930 |
+[exit code: 0]
+
+$ git check-ignore -q docs/testing/reports/x.md
+[exit code: 1]
+
+$ git check-ignore -v reports/x.json
+.gitignore:20:/reports/	reports/x.json
+[exit code: 0]
+
+$ sed -n 308p docs/faza-3-ops/README.md
+QA i końcowy code review działają po tym dokumencie, w procesie delivery; ich raporty trafiają do `docs/testing/reports/` i `docs/reviews/`.
+[exit code: 0]
+
+## OPS-16
+
+$ ( cd deploy/ansible && uv run --locked --python 3.13 --project tools ansible localhost -i localhost, -c local -m ansible.builtin.template -a "src=roles/base/templates/nftables.conf.j2 dest=$RUN/nft/defaults.conf" -e @roles/base/defaults/main.yml )
+localhost | CHANGED => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/home/lex/Projects/patchpoint/deploy/ansible/tools/.venv/bin/python3.13"
+    },
+    "changed": true,
+    "checksum": "09a63b28ebfcd4093bc333cc0abaec9754645255",
+    "dest": "/tmp/pp-final.Qfwisf/nft/defaults.conf",
+    "gid": 1000,
+    "group": "lex",
+    "md5sum": "ac55389a04704e1f2d346b3815e63859",
+    "mode": "0600",
+    "owner": "lex",
+    "size": 1000,
+    "src": "/home/lex/.ansible/tmp/ansible-tmp-1795822839.6279573-471998-94725742103557/.source.conf",
+    "state": "file",
+    "uid": 1000
+}
+[exit code: 0]
+
+$ ( cd deploy/ansible && uv run --locked --python 3.13 --project tools ansible localhost -i localhost, -c local -m ansible.builtin.template -a "src=roles/base/templates/nftables.conf.j2 dest=$RUN/nft/example.conf" -e '{"base_ssh_allowed_ipv4": ["198.51.100.0/24"], "base_ssh_allowed_ipv6": []}' )
+localhost | CHANGED => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/home/lex/Projects/patchpoint/deploy/ansible/tools/.venv/bin/python3.13"
+    },
+    "changed": true,
+    "checksum": "14495a925c7e1044d0b17be893f2de5b64fc2673",
+    "dest": "/tmp/pp-final.Qfwisf/nft/example.conf",
+    "gid": 1000,
+    "group": "lex",
+    "md5sum": "2bbb56236516c2e9b0df383ab1fbce45",
+    "mode": "0600",
+    "owner": "lex",
+    "size": 963,
+    "src": "/home/lex/.ansible/tmp/ansible-tmp-1795822844.3251343-472065-203742002510441/.source.conf",
+    "state": "file",
+    "uid": 1000
+}
+[exit code: 0]
+
+$ docker run --rm --cap-add NET_ADMIN -v "$RUN/nft:/nft:ro" debian:trixie-slim sh -c 'apt-get update -qq && apt-get install -y -qq nftables >/dev/null && nft -c -f /nft/defaults.conf && nft -c -f /nft/example.conf'
+debconf: unable to initialize frontend: Dialog
+debconf: (TERM is not set, so the dialog frontend is not usable.)
+debconf: falling back to frontend: Readline
+debconf: unable to initialize frontend: Readline
+debconf: (Can't locate Term/ReadLine.pm in @INC (you may need to install the Term::ReadLine module) (@INC entries checked: /etc/perl /usr/local/lib/x86_64-linux-gnu/perl/5.40.1 /usr/local/share/perl/5.40.1 /usr/lib/x86_64-linux-gnu/perl5/5.40 /usr/share/perl5 /usr/lib/x86_64-linux-gnu/perl-base /usr/lib/x86_64-linux-gnu/perl/5.40 /usr/share/perl/5.40 /usr/local/lib/site_perl) at /usr/share/perl5/Debconf/FrontEnd/Readline.pm line 8, <STDIN> line 8.)
+debconf: falling back to frontend: Teletype
+debconf: unable to initialize frontend: Teletype
+debconf: (This frontend requires a controlling tty.)
+debconf: falling back to frontend: Noninteractive
+[exit code: 0]
+
+$ cat "$RUN/nft/defaults.conf"
+#!/usr/sbin/nft -f
+# Zarządzane przez Ansible (rola base). Zapora ruchu do samego hosta (hook input). Ruch do opublikowanych
+# portów proxy (80, 443) Docker przekierowuje przez DNAT do łańcuchów FORWARD, którymi zarządza sam. Plik
+# nie zawiera "flush ruleset", bo usunięcie reguł Dockera odcięłoby kontenery od sieci.
+table inet patchpoint_host
+delete table inet patchpoint_host
+
+table inet patchpoint_host {
+  chain input {
+    type filter hook input priority filter; policy drop;
+
+    iif "lo" accept
+    ct state established,related accept
+    ct state invalid drop
+
+    ip protocol icmp icmp type { echo-request, destination-unreachable, time-exceeded } accept
+    ip6 nexthdr icmpv6 icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem, echo-request, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept
+
+    ip saddr { 0.0.0.0/0 } tcp dport 22 accept
+    ip6 saddr { ::/0 } tcp dport 22 accept
+    tcp dport { 80, 443 } accept
+  }
+}
+[exit code: 0]
+
+$ cat "$RUN/nft/example.conf"
+#!/usr/sbin/nft -f
+# Zarządzane przez Ansible (rola base). Zapora ruchu do samego hosta (hook input). Ruch do opublikowanych
+# portów proxy (80, 443) Docker przekierowuje przez DNAT do łańcuchów FORWARD, którymi zarządza sam. Plik
+# nie zawiera "flush ruleset", bo usunięcie reguł Dockera odcięłoby kontenery od sieci.
+table inet patchpoint_host
+delete table inet patchpoint_host
+
+table inet patchpoint_host {
+  chain input {
+    type filter hook input priority filter; policy drop;
+
+    iif "lo" accept
+    ct state established,related accept
+    ct state invalid drop
+
+    ip protocol icmp icmp type { echo-request, destination-unreachable, time-exceeded } accept
+    ip6 nexthdr icmpv6 icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem, echo-request, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept
+
+    ip saddr { 198.51.100.0/24 } tcp dport 22 accept
+    tcp dport { 80, 443 } accept
+  }
+}
+[exit code: 0]
+
+$ grep -n "tcp dport 22 accept" "$RUN/nft/defaults.conf" "$RUN/nft/example.conf"
+/tmp/pp-final.Qfwisf/nft/defaults.conf:19:    ip saddr { 0.0.0.0/0 } tcp dport 22 accept
+/tmp/pp-final.Qfwisf/nft/defaults.conf:20:    ip6 saddr { ::/0 } tcp dport 22 accept
+/tmp/pp-final.Qfwisf/nft/example.conf:19:    ip saddr { 198.51.100.0/24 } tcp dport 22 accept
+[exit code: 0]
+
+$ grep -c "ip saddr { 198.51.100.0/24 } tcp dport 22 accept" "$RUN/nft/example.conf"
+1
+[exit code: 0]
+
+$ grep -c "ip6 saddr" "$RUN/nft/example.conf"
+0
+[exit code: 1]
+
+$ grep -c "ip saddr { 0.0.0.0/0 } tcp dport 22 accept" "$RUN/nft/defaults.conf"
+1
+[exit code: 0]
+
+$ grep -c "ip6 saddr { ::/0 } tcp dport 22 accept" "$RUN/nft/defaults.conf"
+1
+[exit code: 0]
+
+$ openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -noenc -days 7 -subj "/CN=helpdesk.example.com" -addext "subjectAltName=DNS:helpdesk.example.com" -addext "basicConstraints=critical,CA:FALSE" -addext "extendedKeyUsage=serverAuth" -keyout "$RUN/tls/privkey.pem" -out "$RUN/tls/fullchain.pem"
+-----
+[exit code: 0]
+
+$ openssl x509 -in "$RUN/tls/fullchain.pem" -noout -ext subjectAltName,basicConstraints,extendedKeyUsage
+X509v3 Subject Alternative Name: 
+    DNS:helpdesk.example.com
+X509v3 Basic Constraints: critical
+    CA:FALSE
+X509v3 Extended Key Usage: 
+    TLS Web Server Authentication
+[exit code: 0]
+
+$ openssl x509 -in "$RUN/tls/fullchain.pem" -noout -subject -dates
+subject=CN=helpdesk.example.com
+notBefore=Nov 27 23:40:58 2026 GMT
+notAfter=Dec  4 23:40:58 2026 GMT
+[exit code: 0]
+
+$ grep -rniE 'fail2ban|sshguard|crowdsec' deploy/ README.md docs/faza-3-ops/README.md
+[exit code: 1]
+
+$ grep -rniE 'fail2ban|sshguard|crowdsec' deploy/ README.md docs/faza-3-ops/README.md | wc -l
+0
+[exit code: 0]
+
+$ sed -n 83p docs/faza-3-ops/README.md | cut -c1-1200
+| Host | nftables (tabela `patchpoint_host`), sshd, certbot, Docker Engine | 22 tylko ze źródeł `base_ssh_allowed_ipv4` i `base_ssh_allowed_ipv6` (domyślnie cały Internet, do zawężenia w inventory), 80 i 443; pozostały ruch do hosta jest odrzucany | security group i NACL instancji |
+[exit code: 0]
+
+$ sed -n 11,14p deploy/ansible/roles/base/defaults/main.yml
+base_ssh_allowed_ipv4:
+  - 0.0.0.0/0
+base_ssh_allowed_ipv6:
+  - "::/0"
+[exit code: 0]
+
+$ uv --version
+uv 0.13.8 (x86_64-unknown-linux-gnu)
+[exit code: 0]
+
+## Notes on the exit codes above
+
+# - Blocks whose command ends in `grep -c …`/`grep -vc …` or `grep -n …` show the exit code of that last grep: 1 means "no line matched" (count 0), which is the expected outcome for the negative contract checks (`grep -vc '@sha256:'`, `grep -vcE '@[0-9a-f]{40} # v'`, the empty `.trivyignore`, `schedule:`, `sbom|syft|cosign|attest`, `kics|checkov`, `gitleaks|trufflehog`, `fail2ban|sshguard|crowdsec`, and `ip6 saddr` in example.conf).
+# - `git check-ignore -q docs/testing/reports/x.md` exits 1 = the path is NOT ignored (the expected result).
+# - Blocks that end in `| wc -l`, `| jq …` or `| tail` show the exit code of that last command; the `gh run view … --log | grep` block runs under `set -o pipefail`.
+# - gitleaks exits 1 = leaks found (2 findings, triaged in results-repo.md); the OPS-13 Semgrep run exits 2 (configuration download failed).

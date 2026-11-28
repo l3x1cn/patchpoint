@@ -1,0 +1,433 @@
+# OPS-01 baseline gates — 2026-11-27T23:40:51+01:00
+# Head: 8f3549879c03696eb639fd4927ea1e92243bd984 on delivery/patchpoint-final-testing
+# docker: Docker version 29.10.0, build fdd4b8e5da
+
+$ make lint
+cd backend && uv run ruff check . && uv run ruff format --check .
+All checks passed!
+29 files already formatted
+[exit code: 0]
+
+$ make typecheck
+cd backend && uv run mypy app tests
+Success: no issues found in 29 source files
+[exit code: 0]
+
+$ make test
+cd backend && uv run pytest
+============================= test session starts ==============================
+platform linux -- Python 3.14.10, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/lex/Projects/patchpoint/backend
+configfile: pyproject.toml
+testpaths: tests
+plugins: cov-7.1.0, anyio-4.16.0
+collected 145 items
+
+tests/test_auth.py .............................                         [ 20%]
+tests/test_auth_concurrency.py ....                                      [ 22%]
+tests/test_client_ip.py .                                                [ 23%]
+tests/test_cookie_name.py ........                                       [ 28%]
+tests/test_cors.py ..........                                            [ 35%]
+tests/test_database.py .............                                     [ 44%]
+tests/test_errors.py ...                                                 [ 46%]
+tests/test_health.py .                                                   [ 47%]
+tests/test_platform.py ...........                                       [ 55%]
+tests/test_sessions.py ........                                          [ 60%]
+tests/test_ticket_security.py ........................                   [ 77%]
+tests/test_tickets.py .................................                  [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.14.10-final-0 _______________
+
+Name                      Stmts   Miss  Cover   Missing
+-------------------------------------------------------
+app/__init__.py               0      0   100%
+app/audit.py                 18      0   100%
+app/config.py                37      0   100%
+app/database.py             111      5    95%   128-129, 136-137, 191
+app/dependencies.py          35      0   100%
+app/main.py                  51      1    98%   48
+app/middleware.py            39      0   100%
+app/routers/__init__.py       0      0   100%
+app/routers/auth.py          61      2    97%   61, 73
+app/routers/health.py         9      0   100%
+app/routers/tickets.py       78      1    99%   255
+app/schemas.py               66      0   100%
+app/security.py              30      0   100%
+app/sessions.py              59      1    98%   94
+-------------------------------------------------------
+TOTAL                       594     10    98%
+Required test coverage of 80% reached. Total coverage: 98.32%
+============================= 145 passed in 14.24s =============================
+[exit code: 0]
+
+$ make semgrep
+./scripts/scan.sh semgrep
+               
+               
+┌─────────────┐
+│ Scan Status │
+└─────────────┘
+  Scanning 71 files tracked by git with 577 Code rules:
+                                                                                                                        
+  Language      Rules   Files          Origin      Rules                                                                
+ ─────────────────────────────        ───────────────────                                                               
+  <multilang>      15      71          Community     577                                                                
+  yaml             33      19                                                                                           
+  python          151      14                                                                                           
+  bash              1       5                                                                                           
+  dockerfile        7       2                                                                                           
+  js               68       1                                                                                           
+  html              1       1                                                                                           
+                                                                                                                        
+                
+                
+┌──────────────┐
+│ Scan Summary │
+└──────────────┘
+✅ Scan completed successfully.
+ • Findings: 0 (0 blocking)
+ • Rules run: 275
+ • Targets scanned: 71
+ • Parsed lines: ~100.0%
+ • Scan skipped: 
+   ◦ Files matching .semgrepignore patterns: 66
+ • Scan was limited to files tracked by git
+ • For a detailed list of skipped files and lines, run semgrep with the --verbose flag
+Ran 275 rules on 71 files: 0 findings.
+(need more rules? `semgrep login` for additional free Semgrep Registry rules)
+
+If Semgrep missed a finding, please send us feedback to let us know!
+See https://semgrep.dev/docs/reporting-false-negatives/
+Bramka Semgrep: brak znalezisk. Wyniki: reports/semgrep.json, reports/semgrep.sarif
+[exit code: 0]
+
+$ jq '.errors | length' reports/semgrep.json
+0
+[exit code: 0]
+
+$ make trivy-fs
+./scripts/scan.sh fs
+
+Report Summary
+
+┌──────────────────────────────┬────────────┬─────────────────┬─────────┬───────────────────┐
+│            Target            │    Type    │ Vulnerabilities │ Secrets │ Misconfigurations │
+├──────────────────────────────┼────────────┼─────────────────┼─────────┼───────────────────┤
+│ backend/uv.lock              │     uv     │        0        │    -    │         -         │
+├──────────────────────────────┼────────────┼─────────────────┼─────────┼───────────────────┤
+│ deploy/ansible/tools/uv.lock │     uv     │        0        │    -    │         -         │
+├──────────────────────────────┼────────────┼─────────────────┼─────────┼───────────────────┤
+│ backend/Dockerfile           │ dockerfile │        -        │    -    │         0         │
+├──────────────────────────────┼────────────┼─────────────────┼─────────┼───────────────────┤
+│ deploy/proxy/Dockerfile      │ dockerfile │        -        │    -    │         0         │
+└──────────────────────────────┴────────────┴─────────────────┴─────────┴───────────────────┘
+Legend:
+- '-': Not scanned
+- '0': Clean (no security findings detected)
+
+Bramka Trivy (trivy-fs): brak znalezisk HIGH i CRITICAL. Wyniki: reports/trivy-fs.json, reports/trivy-fs.sarif
+[exit code: 0]
+
+$ make shellcheck
+./scripts/scan.sh shellcheck
+Bramka ShellCheck: brak uwag (5 skryptów).
+[exit code: 0]
+
+$ make actionlint
+./scripts/scan.sh actionlint
+Bramka actionlint: brak uwag.
+[exit code: 0]
+
+$ make ansible-lint
+cd deploy/ansible && uv run --locked --python 3.13 --project tools ansible-lint
+
+Passed: 0 failure(s), 0 warning(s) in 28 files processed of 29 encountered. Profile 'production' was required, and it passed.
+cd deploy/ansible && uv run --locked --python 3.13 --project tools ansible-galaxy collection install -r requirements.yml -p .ansible/collections
+Starting galaxy collection install process
+Nothing to do. All requested collections are already installed. If you want to reinstall them, consider using `--force`.
+cd deploy/ansible && ANSIBLE_COLLECTIONS_PATH=.ansible/collections uv run --locked --python 3.13 --project tools ansible-playbook --syntax-check -i inventory.example.yml site.yml
+
+playbook: site.yml
+[exit code: 0]
+
+$ docker build --no-cache --label org.opencontainers.image.source=https://github.com/l3x1cn/patchpoint --label org.opencontainers.image.revision="$(git rev-parse HEAD)" --label org.opencontainers.image.title=patchpoint-api -t patchpoint-api:local backend
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 2.69kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for ghcr.io/astral-sh/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab281fdb225fd82d8ce6d66a81254bac85
+#2 DONE 0.6s
+
+#3 [internal] load metadata for docker.io/library/python:3.14.10-slim@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f
+#3 DONE 0.7s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 165B done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 DONE 0.0s
+
+#6 [build 1/5] FROM docker.io/library/python:3.14.10-slim@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f
+#6 resolve docker.io/library/python:3.14.10-slim@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f 0.1s done
+#6 DONE 0.1s
+
+#7 [uv 1/1] FROM ghcr.io/astral-sh/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab281fdb225fd82d8ce6d66a81254bac85
+#7 resolve ghcr.io/astral-sh/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab281fdb225fd82d8ce6d66a81254bac85
+… [361 lines omitted]
+(Reading database ... 50%
+(Reading database ... 55%
+(Reading database ... 60%
+(Reading database ... 65%
+(Reading database ... 70%
+(Reading database ... 75%
+(Reading database ... 80%
+(Reading database ... 85%
+(Reading database ... 90%
+(Reading database ... 95%
+(Reading database ... 100%
+(Reading database ... 5657 files and directories currently installed.)
+
+#9 6.121 Preparing to unpack .../openssl_3.5.9-1~deb13u1_amd64.deb ...
+
+#9 6.135 Unpacking openssl (3.5.9-1~deb13u1) over (3.5.7-1~deb13u3) ...
+
+#9 6.215 Setting up openssl (3.5.9-1~deb13u1) ...
+
+#9 6.236 Processing triggers for libc-bin (2.41-12+deb13u5) ...
+
+#9 7.675 Found existing installation: pip 26.2.2
+#9 7.717 Uninstalling pip-26.2.2:
+#9 7.899   Successfully uninstalled pip-26.2.2
+#9 DONE 8.1s
+
+#13 [stage-2 3/6] COPY --from=build /app/.venv /app/.venv
+#13 DONE 0.2s
+
+#14 [stage-2 4/6] COPY app /app/app
+#14 DONE 0.1s
+
+#15 [stage-2 5/6] RUN chmod -R u=rwX,go=rX /app/app && mkdir /data && chown 10001:10001 /data
+#15 DONE 0.2s
+
+#16 [stage-2 6/6] WORKDIR /app
+#16 DONE 0.1s
+
+#17 exporting to image
+#17 exporting layers
+#17 exporting layers 1.4s done
+#17 exporting manifest sha256:6833632575001778fa6dbe7e2c546d6a29360b07d637b6a670e481c6a2275f2b 0.0s done
+#17 exporting config sha256:4bbc20c8a597694a4d6e6fcff48c01bb2bff8739298930bbf0918ed30a036c02 0.0s done
+#17 exporting attestation manifest sha256:b745e868a10769664b9301d38bbeda4f605b1ef6fb2b67c4c7f0745aba239d08 0.0s done
+#17 exporting manifest list sha256:99270dff12015fde839644e2fe2106b067327b7a0f5b2a2a70758c0e616f0c97 0.0s done
+#17 naming to docker.io/library/patchpoint-api:local
+#17 naming to docker.io/library/patchpoint-api:local done
+#17 unpacking to docker.io/library/patchpoint-api:local
+#17 unpacking to docker.io/library/patchpoint-api:local 0.7s done
+#17 DONE 2.2s
+[exit code: 0]
+
+$ make images
+docker build --label org.opencontainers.image.source=https://github.com/l3x1cn/patchpoint --label org.opencontainers.image.revision=8f3549879c03696eb639fd4927ea1e92243bd984 --label org.opencontainers.image.title=patchpoint-api -t patchpoint-api:local backend
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 2.69kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for ghcr.io/astral-sh/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab281fdb225fd82d8ce6d66a81254bac85
+#2 DONE 0.1s
+
+#3 [internal] load metadata for docker.io/library/python:3.14.10-slim@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f
+#3 DONE 0.1s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 165B done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 DONE 0.0s
+
+#6 [uv 1/1] FROM ghcr.io/astral-sh/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab281fdb225fd82d8ce6d66a81254bac85
+#6 resolve ghcr.io/astral-sh/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab281fdb225fd82d8ce6d66a81254bac85 0.1s done
+#6 DONE 0.1s
+
+#7 [build 1/5] FROM docker.io/library/python:3.14.10-slim@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f
+… [50 lines omitted]
+#1 WARN: SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ENV "PATCHPOINT_AUTH_BURST") (line 47)
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/owasp/modsecurity-crs:4.30.0-nginx-alpine-202611271111@sha256:e473af8dcd3ef1ecb9ad61622c0a1dc82a61b3db7844fdd500de228244e0e25f
+#2 DONE 0.0s
+
+#3 [internal] load build context
+#3 transferring context: 789B done
+#3 DONE 0.0s
+
+#4 [ui 1/4] FROM docker.io/owasp/modsecurity-crs:4.30.0-nginx-alpine-202611271111@sha256:e473af8dcd3ef1ecb9ad61622c0a1dc82a61b3db7844fdd500de228244e0e25f
+#4 resolve docker.io/owasp/modsecurity-crs:4.30.0-nginx-alpine-202611271111@sha256:e473af8dcd3ef1ecb9ad61622c0a1dc82a61b3db7844fdd500de228244e0e25f
+#4 resolve docker.io/owasp/modsecurity-crs:4.30.0-nginx-alpine-202611271111@sha256:e473af8dcd3ef1ecb9ad61622c0a1dc82a61b3db7844fdd500de228244e0e25f 0.0s done
+#4 DONE 0.1s
+
+#5 [stage-1 3/5] COPY deploy/proxy/templates/ /etc/nginx/templates/
+#5 CACHED
+
+#6 [stage-1 4/5] RUN chmod -R u=rwX,go=rX /etc/nginx/templates
+#6 CACHED
+
+#7 [ui 2/4] WORKDIR /ui
+#7 CACHED
+
+#8 [ui 3/4] COPY --chmod=u=rwX,go=rX frontend/index.html frontend/app.js frontend/styles.css ./
+#8 CACHED
+
+#9 [stage-1 2/5] COPY --from=ui --chmod=u=rwX,go=rX /ui/ /usr/share/nginx/html/
+#9 CACHED
+
+#10 [ui 4/4] RUN sed -i 's|^const API_BASE_URL = "http://patchpoint.localhost:8000";$|const API_BASE_URL = "";|' app.js     && grep -qx 'const API_BASE_URL = "";' app.js     && sed -i "s|connect-src http://patchpoint.localhost:8000;|connect-src 'self';|" index.html     && grep -qF "connect-src 'self';" index.html     && ! grep -qF 'patchpoint.localhost:8000' app.js index.html
+#10 CACHED
+
+#11 [stage-1 5/5] COPY --chmod=u=rw,go=r deploy/proxy/modsecurity/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf /opt/owasp-crs/rules/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf
+#11 CACHED
+
+#12 exporting to image
+#12 exporting layers done
+#12 exporting manifest sha256:d2db65d1875bc9c65506e54150d68592464151d4f0efd18803eae4c89f4d7a35 0.0s done
+#12 exporting config sha256:811f27f272aec555630e2fc0c9ff1d226815fc5b1e01f20f158ae1b56290dff8 0.0s done
+#12 exporting attestation manifest sha256:29c0cf83ead40c3d7b42e02f3be11b31116642a84e6949e1b37f3ea3eec939c6 0.0s done
+#12 exporting manifest list sha256:23b42c361d72e4e78d9344683a0ca0067df5002897659dbf566b3e0d2fbfcfe2
+#12 exporting manifest list sha256:23b42c361d72e4e78d9344683a0ca0067df5002897659dbf566b3e0d2fbfcfe2 0.0s done
+#12 naming to docker.io/library/patchpoint-proxy:local done
+#12 unpacking to docker.io/library/patchpoint-proxy:local 0.0s done
+#12 DONE 0.2s
+
+ 2 warnings found (use docker --debug to expand):
+ - SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ENV "PATCHPOINT_AUTH_RATE") (line 47)
+ - SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ENV "PATCHPOINT_AUTH_BURST") (line 47)
+[exit code: 0]
+
+$ make trivy-images
+./scripts/scan.sh image api patchpoint-api:local
+
+Report Summary
+
+┌──────────────────────────────────────────────────────────────────────────────────┬────────────┬─────────────────┐
+│                                      Target                                      │    Type    │ Vulnerabilities │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ /work/image.tar (debian 13.8)                                                    │   debian   │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ app/.venv/lib/python3.14/site-packages/annotated_doc-0.0.6.dist-info/METADATA    │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ app/.venv/lib/python3.14/site-packages/annotated_types-0.8.0.dist-info/METADATA  │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ app/.venv/lib/python3.14/site-packages/anyio-4.16.0.dist-info/METADATA           │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ app/.venv/lib/python3.14/site-packages/argon2_cffi-25.1.0.dist-info/METADATA     │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ app/.venv/lib/python3.14/site-packages/argon2_cffi_bindings-26.2.0.dist-info/ME- │ python-pkg │        0        │
+│ TADATA                                                                           │            │                 │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ app/.venv/lib/python3.14/site-packages/cffi-2.1.1.dist-info/METADATA             │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ app/.venv/lib/python3.14/site-packages/click-8.5.1.dist-info/METADATA            │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ app/.venv/lib/python3.14/site-packages/fastapi-0.163.1.dist-info/METADATA        │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ app/.venv/lib/python3.14/site-packages/h11-0.16.0.dist-info/METADATA             │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ app/.venv/lib/python3.14/site-packages/idna-3.20.dist-info/METADATA              │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ app/.venv/lib/python3.14/site-packages/opentelemetry_api-1.45.2.dist-info/METAD- │ python-pkg │        0        │
+│ ATA                                                                              │            │                 │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ app/.venv/lib/python3.14/site-packages/pycparser-3.12.dist-info/METADATA         │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ app/.venv/lib/python3.14/site-packages/pydantic-2.14.3.dist-info/METADATA        │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ app/.venv/lib/python3.14/site-packages/pydantic_core-2.50.4.dist-info/METADATA   │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ app/.venv/lib/python3.14/site-packages/pydantic_settings-2.16.3.dist-info/METAD- │ python-pkg │        0        │
+│ ATA                                                                              │            │                 │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ app/.venv/lib/python3.14/site-packages/python_dotenv-1.2.4.dist-info/METADATA    │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ app/.venv/lib/python3.14/site-packages/starlette-1.10.0.dist-info/METADATA       │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ app/.venv/lib/python3.14/site-packages/typing_extensions-4.16.0.dist-info/METAD- │ python-pkg │        0        │
+│ ATA                                                                              │            │                 │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ app/.venv/lib/python3.14/site-packages/typing_inspection-0.4.5.dist-info/METADA- │ python-pkg │        0        │
+│ TA                                                                               │            │                 │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ app/.venv/lib/python3.14/site-packages/uvicorn-0.54.0.dist-info/METADATA         │ python-pkg │        0        │
+└──────────────────────────────────────────────────────────────────────────────────┴────────────┴─────────────────┘
+Legend:
+- '-': Not scanned
+- '0': Clean (no security findings detected)
+
+Bramka Trivy (trivy-image-api): brak znalezisk HIGH i CRITICAL. Wyniki: reports/trivy-image-api.json, reports/trivy-image-api.sarif
+./scripts/scan.sh image proxy patchpoint-proxy:local
+
+Report Summary
+
+┌─────────────────────────────────┬────────┬─────────────────┐
+│             Target              │  Type  │ Vulnerabilities │
+├─────────────────────────────────┼────────┼─────────────────┤
+│ /work/image.tar (alpine 3.24.4) │ alpine │        0        │
+└─────────────────────────────────┴────────┴─────────────────┘
+Legend:
+- '-': Not scanned
+- '0': Clean (no security findings detected)
+
+Bramka Trivy (trivy-image-proxy): brak znalezisk HIGH i CRITICAL. Wyniki: reports/trivy-image-proxy.json, reports/trivy-image-proxy.sarif
+[exit code: 0]
+
+$ make stack-smoke
+PATCHPOINT_API_IMAGE=patchpoint-api:local PATCHPOINT_PROXY_IMAGE=patchpoint-proxy:local ./scripts/stack_smoke.sh
+PatchPoint — smoke obrazów i stosu compose
+Obraz API: patchpoint-api:local
+Obraz proxy: patchpoint-proxy:local
+Data: 2026-11-27T23:41:54+01:00
+
+==> Część 1: obrazy
+[OK] obraz API działa jako 10001:10001
+[OK] obraz proxy działa jako nginx
+[OK] obraz patchpoint-api:local ma HEALTHCHECK
+[OK] obraz patchpoint-proxy:local ma HEALTHCHECK
+[OK] obraz API nie zawiera pip
+
+==> Część 2: kontener API i PoC z Fazy 2
+[OK] PoC Fazy 2 w kontenerze API: 22 × [NAPRAWIONE]
+     Podsumowanie: podatne=0, naprawione=22, pominięte=0
+[OK] log kontenera API nie zawiera hasła demo
+
+==> Część 3: stos compose z proxy, WAF i TLS
+[OK] UI przez HTTPS: 200, CSP z frame-ancestors, HSTS i nagłówki bezpieczeństwa, bez nagłówka Server
+[OK] UI wywołuje względne /api/ i ma CSP connect-src 'self' w meta
+[OK] HTTP przekierowuje na HTTPS (301)
+[OK] wyzwania ACME nie są przekierowywane na HTTPS (404 dla brakującego pliku)
+[OK] GET /api/health przez proxy: 200, Cache-Control z API i HSTS z proxy
+[OK] demo end-to-end przez proxy (logowanie, zgłoszenia, PATCH, komentarze, wylogowanie)
+     DEMO ZAKOŃCZONE POWODZENIEM
+[OK] rejestracja z silnym hasłem (apostrofy, cudzysłowy, znaczniki HTML) przechodzi przez WAF
+[OK] logowanie ustawia __Host-session z HttpOnly, Secure, Path=/, SameSite=Strict i bez Domain
+[OK] sesja działa tylko pod nazwą __Host-session (200), pod nazwą session: 401
+[OK] obcy Origin: 403 "Origin not allowed", a sesja pozostaje ważna
+[OK] WAF blokuje SQL injection w parametrze search (403, JSON)
+[OK] WAF blokuje XSS w polu full_name (403, JSON)
+[OK] odmowa dostępu do /metrics/nginx: 403 z neutralnym komunikatem proxy
+[OK] audit log WAF zawiera reguły 942xxx (SQLi) i 941xxx (XSS)
+[OK] logi proxy nie zawierają haseł ani tokenu sesji
+[OK] client_ip w logu API to adres klienta, nie wartość z nagłówka klienta ani adres proxy
+[OK] procesy bez uprawnień roota: API 10001, proxy 101
+[OK] kontener API: system plików tylko do odczytu, cap_drop ALL, no-new-privileges
+[OK] API nie ma opublikowanego portu
+[OK] API nie ma wyjścia do Internetu (sieć backend: internal)
+[OK] limit żądań logowania: 10 z 12 odpowiedzi to 429 z JSON, pozostałe 401 (bez 5xx)
+
+STACK SMOKE ZAKOŃCZONY POWODZENIEM
+[exit code: 0]
+

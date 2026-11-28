@@ -1,0 +1,504 @@
+# BE-01 … BE-08 — dev API scenarios — 2026-11-27T23:42:23+01:00
+# Head: 8f3549879c03696eb639fd4927ea1e92243bd984
+# Instances (single uvicorn via make run): dev 18100, workers 18101 (WEB_CONCURRENCY=4), docs 18102; databases under $RUN (deleted at the end)
+# Convention: $RUN = private temp directory, $SFX = 9943bd
+
+## BE-01
+
+$ BASE=http://127.0.0.1:18102; req GET /openapi.json
+200 0.040509
+[exit code: 0]
+
+$ jq -c "{version: .info.version, title: .info.title, description: .info.description}" "$RUN/last.body"
+{"version":"0.3.0","title":"PatchPoint API","description":null}
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18102; curl -s --noproxy "*" -o /dev/null -w "%{http_code} %{content_type}\n" "$BASE/docs"
+200 text/html; charset=utf-8
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18100; req GET /openapi.json; jq -c . "$RUN/last.body"
+404 0.008725
+{"detail":"Not Found"}
+[exit code: 0]
+
+$ grep -n "^version" backend/pyproject.toml
+3:version = "0.3.0"
+[exit code: 0]
+
+$ grep -nE "APP_VERSION|FastAPI\(|version=" backend/app/config.py backend/app/main.py
+backend/app/config.py:7:APP_VERSION: Final = "0.3.0"
+backend/app/main.py:15:from app.config import APP_VERSION, Settings
+backend/app/main.py:78:    app = FastAPI(
+backend/app/main.py:80:        version=APP_VERSION,
+[exit code: 0]
+
+## BE-02
+
+$ BASE=http://127.0.0.1:18100; for n in $(seq -w 1 20); do u=qa.final.$SFX.p$n; new_user $u; req POST /api/auth/register --data-binary @$RUN/reg.$u.json | cut -d" " -f1; done | sort | uniq -c
+     20 201
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/dev/patchpoint.db" "PRAGMA journal_mode; SELECT COUNT(*) FROM users; SELECT COUNT(*) FROM tickets"
+delete
+23
+3
+[exit code: 0]
+
+$ wave be02a; summary be02a
+     20 200
+     20 201
+     40 
+p50=0.215556 p95=0.279951 max=0.295006
+[exit code: 0]
+
+$ wave be02b; summary be02b
+     40 201
+     40 
+p50=0.002007 p95=0.002691 max=0.003681
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/dev/patchpoint.db" "SELECT COUNT(*) FROM users; SELECT COUNT(*) FROM tickets"
+43
+43
+[exit code: 0]
+
+$ grep -c "\"event\": \"internal_error\"" "$RUN/dev/api.log" || true
+0
+[exit code: 0]
+
+$ grep -c internal_error "$RUN/dev/api.log" || true
+0
+[exit code: 0]
+
+$ wave be02c; summary be02c
+     20 401
+     20 Invalid username or password
+p50=0.187432 p95=0.236003 max=0.264288
+[exit code: 0]
+
+$ grep -c internal_error "$RUN/dev/api.log" || true
+0
+[exit code: 0]
+
+## BE-03
+
+$ BASE=http://127.0.0.1:18100; u=qa.final.$SFX.lock; new_user $u; req POST /api/auth/register --data-binary @$RUN/reg.$u.json
+201 0.041064
+[exit code: 0]
+
+$ wave be03; summary be03
+      5 401
+     15 429
+      5 Invalid username or password
+     15 Too many failed login attempts. Try again later.
+p50=0.002596 p95=0.118191 max=0.127723
+[exit code: 0]
+
+$ cut -f2,5 "$RUN/be03.out" | awk -F"\t" "{print \$1\" retry-after=\"\$2}" | sort | uniq -c
+      5 401 retry-after=
+     15 429 retry-after=900
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/dev/patchpoint.db" "SELECT COUNT(*) FROM login_failures WHERE username = 'qa.final.9943bd.lock'"
+5
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18100; u=qa.final.$SFX.lock; req POST /api/auth/login --data-binary @$RUN/login.$u.json; jq -c .detail "$RUN/last.body"
+429 0.002190
+"Too many failed login attempts. Try again later."
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18100; u=qa.final.$SFX.p01; req POST /api/auth/login --data-binary @$RUN/login.$u.json -c $RUN/p01b.jar
+200 0.069261
+[exit code: 0]
+
+$ grep -c internal_error "$RUN/dev/api.log" || true
+0
+[exit code: 0]
+
+## BE-04
+
+$ BASE=http://127.0.0.1:18100; u=qa.final.$SFX.emp; new_user $u; req POST /api/auth/register --data-binary @$RUN/reg.$u.json; req POST /api/auth/login --data-binary @$RUN/login.$u.json -c $RUN/emp.jar; req POST /api/auth/login --data-binary @$RUN/login.helpdesk.json -c $RUN/helpdesk.jar
+201 0.040649
+200 0.041743
+200 0.039980
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18100; for i in $(seq -w 1 10); do req POST /api/tickets --data-binary @$RUN/be04.$i.req -b $RUN/emp.jar | cut -d" " -f1; jq -r .id "$RUN/last.body" >> $RUN/be04.ids; done | sort | uniq -c; echo "ticket ids: $(tr "\n" " " < $RUN/be04.ids)"
+     10 201
+ticket ids: 44 45 46 47 48 49 50 51 52 53 
+[exit code: 0]
+
+$ wave be04; summary be04
+     10 200
+     10 400
+     10 
+      5 Invalid status transition: closed -> in_progress
+      5 Invalid status transition: in_progress -> closed
+p50=0.002220 p95=0.003381 max=0.006041
+[exit code: 0]
+
+$ sort "$RUN/be04.out" | awk -F"\t" "{print \$1, \$2, \$4}"
+t44-cl 200 
+t44-ip 400 Invalid status transition: closed -> in_progress
+t45-cl 400 Invalid status transition: in_progress -> closed
+t45-ip 200 
+t46-cl 200 
+t46-ip 400 Invalid status transition: closed -> in_progress
+t47-cl 400 Invalid status transition: in_progress -> closed
+t47-ip 200 
+t48-cl 200 
+t48-ip 400 Invalid status transition: closed -> in_progress
+t49-cl 400 Invalid status transition: in_progress -> closed
+t49-ip 200 
+t50-cl 200 
+t50-ip 400 Invalid status transition: closed -> in_progress
+t51-cl 400 Invalid status transition: in_progress -> closed
+t51-ip 200 
+t52-cl 200 
+t52-ip 400 Invalid status transition: closed -> in_progress
+t53-cl 400 Invalid status transition: in_progress -> closed
+t53-ip 200 
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18100; while read -r id; do ip=$(awk -F"\t" -v k="t$id-ip" "\$1==k{print \$2}" $RUN/be04.out); cl=$(awk -F"\t" -v k="t$id-cl" "\$1==k{print \$2}" $RUN/be04.out); req GET /api/tickets/$id -b $RUN/helpdesk.jar >/dev/null; echo "ticket $id: in_progress=$ip closed=$cl final_status=$(jq -r .status $RUN/last.body)"; done < $RUN/be04.ids
+ticket 44: in_progress=400 closed=200 final_status=closed
+ticket 45: in_progress=200 closed=400 final_status=in_progress
+ticket 46: in_progress=400 closed=200 final_status=closed
+ticket 47: in_progress=200 closed=400 final_status=in_progress
+ticket 48: in_progress=400 closed=200 final_status=closed
+ticket 49: in_progress=200 closed=400 final_status=in_progress
+ticket 50: in_progress=400 closed=200 final_status=closed
+ticket 51: in_progress=200 closed=400 final_status=in_progress
+ticket 52: in_progress=400 closed=200 final_status=closed
+ticket 53: in_progress=200 closed=400 final_status=in_progress
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18100; id=$(head -1 $RUN/be04.ids); printf "{}" > $RUN/be04.empty.req; req PATCH /api/tickets/$id --data-binary @$RUN/be04.empty.req -b $RUN/helpdesk.jar; jq -c .detail $RUN/last.body
+400 0.001682
+"Nothing to update"
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18100; id=$(head -1 $RUN/be04.ids); req PATCH /api/tickets/$id --data-binary @$RUN/be04.ip.req -b $RUN/emp.jar; jq -c .detail $RUN/last.body
+403 0.002299
+"Helpdesk agent role required"
+[exit code: 0]
+
+$ grep -c internal_error "$RUN/dev/api.log" || true
+0
+[exit code: 0]
+
+## BE-05
+
+$ BASE=http://127.0.0.1:18100; u=qa.final.$SFX.wal; new_user $u; req POST /api/auth/register --data-binary @$RUN/reg.$u.json
+201 0.040134
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/dev/patchpoint.db" "PRAGMA journal_mode"
+delete
+[exit code: 0]
+
+# edge a) control without the reader (run first)
+$ BASE=http://127.0.0.1:18100; req POST /api/auth/login --data-binary @$RUN/be05.wrong.req; jq -c .detail $RUN/last.body
+401 0.039014
+"Invalid username or password"
+[exit code: 0]
+
+# reader script ($RUN/reader.py):
+#   import sqlite3, sys, time
+#   db = sys.argv[1]
+#   c = sqlite3.connect(db, isolation_level=None)
+#   c.execute("BEGIN")
+#   print("reader count users:", c.execute("SELECT COUNT(*) FROM users").fetchone()[0], flush=True)
+#   time.sleep(15)
+#   c.execute("ROLLBACK")
+#   c.close()
+#   print("reader rolled back", flush=True)
+
+# Run 1: the login is a foreground request, so a login that stalls for 5 s delays the later steps (t = seconds from the reader start, taken when each request was launched; health#1 therefore starts at 6.5 instead of 1.5)
+$ export BASE SFX RUN; : > $RUN/be05.health.out; bash $RUN/be05.sh
+t=1.0 login(wrong pw): 500 5.010160s detail="Internal server error"
+t=11.5 register wal2: 201 3.571090s body={"id":47,"username":"qa.final.9943bd.wal2","role":"employee"}
+t=10.5 health#5 started: 200 0.001487s
+t=6.5 health#1 started: 200 0.001346s
+t=7.5 health#2 started: 200 0.001360s
+t=8.5 health#3 started: 200 0.001292s
+t=9.5 health#4 started: 200 0.001523s
+reader count users: 46
+reader rolled back
+[exit code: 0]
+
+$ grep -c internal_error "$RUN/dev/api.log" || true
+1
+[exit code: 0]
+
+$ grep internal_error "$RUN/dev/api.log" | cut -c1-600
+2026-11-27 23:43:15,744 ERROR patchpoint.errors {"error_id": "939f1ebacc734912bd7fa6045a68f5aa", "event": "internal_error", "exception": "DatabaseError", "method": "POST", "path": "/api/auth/login", "sql": "COMMIT"}
+[exit code: 0]
+
+# Run 2: the same timeline, but the login runs in the background so that the health requests at t≈1.5–5.5 overlap it (registers wal3, because wal2 exists from run 1)
+$ export BASE SFX RUN; : > $RUN/be05b.out; bash $RUN/be05b.sh
+t=1.0 login(wrong pw) started: 500 5.009204s detail="Internal server error"
+t=1.5 health#1 started: 200 4.508505s
+t=2.5 health#2 started: 200 3.505444s
+t=3.5 health#3 started: 200 2.501806s
+t=4.5 health#4 started: 200 1.498765s
+t=5.5 health#5 started: 200 0.496370s
+t=7.0 register wal3 started: 500 5.042754s body="Internal server error"
+reader count users: 47
+reader rolled back
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18100; curl -s --noproxy "*" -m 30 -o /dev/null -w "after reader: health %{http_code} %{time_total}s\n" $BASE/api/health
+after reader: health 200 0.001295s
+[exit code: 0]
+
+$ grep -c internal_error "$RUN/dev/api.log" || true
+3
+[exit code: 0]
+
+$ grep internal_error "$RUN/dev/api.log" | cut -c1-400
+2026-11-27 23:43:15,744 ERROR patchpoint.errors {"error_id": "939f1ebacc734912bd7fa6045a68f5aa", "event": "internal_error", "exception": "DatabaseError", "method": "POST", "path": "/api/auth/login", "sql": "COMMIT"}
+2026-11-27 23:43:51,593 ERROR patchpoint.errors {"error_id": "817ceb15e28d4622921e1a4d5f610e38", "event": "internal_error", "exception": "DatabaseError", "method": "POST", "path": "/api/auth/login", "sql": "COMMIT"}
+2026-11-27 23:43:57,669 ERROR patchpoint.errors {"error_id": "97c7cd6e73324454b33097dcf892b8f4", "event": "internal_error", "exception": "DatabaseError", "method": "POST", "path": "/api/auth/register", "sql": "COMMIT"}
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/dev/patchpoint.db" "PRAGMA journal_mode"
+delete
+[exit code: 0]
+
+## BE-06
+
+$ BASE=http://127.0.0.1:18101; u=qa.final.$SFX.mp; new_user $u; req POST /api/auth/register --data-binary @$RUN/reg.$u.json
+201 0.040609
+[exit code: 0]
+
+$ grep -c "Started server process" $RUN/workers/api.log; grep -E "Started (parent|server) process|Uvicorn running|Started reloader" $RUN/workers/api.log | cut -c1-120
+4
+INFO:     Uvicorn running on http://127.0.0.1:18101 (Press CTRL+C to quit)
+INFO:     Started parent process [419656]
+INFO:     Started server process [419667]
+INFO:     Started server process [419669]
+INFO:     Started server process [419668]
+INFO:     Started server process [419670]
+[exit code: 0]
+
+$ ps -o pid,ppid,args --ppid $(cat $RUN/workers/pgid) -e 2>/dev/null | grep -c "[m]ultiprocessing" || true
+6
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18101; wave be06; summary be06
+      5 401
+     15 429
+      5 Invalid username or password
+     15 Too many failed login attempts. Try again later.
+p50=0.002572 p95=0.145214 max=0.153390
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/workers/patchpoint.db" "SELECT COUNT(*) FROM login_failures WHERE username = 'qa.final.9943bd.mp'"
+5
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18101; wave be06w; summary be06w
+     40 201
+     40 
+p50=0.200206 p95=0.254307 max=0.263811
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/workers/patchpoint.db" "SELECT COUNT(*) FROM users"
+41
+[exit code: 0]
+
+$ grep -c internal_error $RUN/workers/api.log || true
+0
+[exit code: 0]
+
+# edge a) control on dev (same 20-guess wave; fresh user .ctl)
+$ BASE=http://127.0.0.1:18100; u=qa.final.$SFX.ctl; req POST /api/auth/register --data-binary @$RUN/reg.$u.json
+201 0.037616
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18100; wave be06c; summary be06c
+      5 401
+     15 429
+      5 Invalid username or password
+     15 Too many failed login attempts. Try again later.
+p50=0.003368 p95=0.106318 max=0.113275
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/dev/patchpoint.db" "SELECT COUNT(*) FROM login_failures WHERE username = 'qa.final.9943bd.ctl'"
+5
+[exit code: 0]
+
+$ ps -eo pid,ppid,args | awk "\$2==419656 {print}" | cut -c1-110
+419666 419656 /home/lex/Projects/patchpoint/backend/.venv/bin/python -c from multiprocessing.resource_tracker 
+419667 419656 /home/lex/Projects/patchpoint/backend/.venv/bin/python -c from multiprocessing.spawn import spaw
+419668 419656 /home/lex/Projects/patchpoint/backend/.venv/bin/python -c from multiprocessing.spawn import spaw
+419669 419656 /home/lex/Projects/patchpoint/backend/.venv/bin/python -c from multiprocessing.spawn import spaw
+419670 419656 /home/lex/Projects/patchpoint/backend/.venv/bin/python -c from multiprocessing.spawn import spaw
+[exit code: 0]
+
+# extra rounds: does the count-read/failure-write race show on the workers instance? (fresh users .mp2 … .mp4, 20 parallel wrong logins each)
+$ BASE=http://127.0.0.1:18101; u=qa.final.$SFX.mp2; req POST /api/auth/register --data-binary @$RUN/reg.$u.json | cut -d' ' -f1; wave be06r2; summary be06r2
+201
+      5 401
+     15 429
+      5 Invalid username or password
+     15 Too many failed login attempts. Try again later.
+p50=0.002321 p95=0.120076 max=0.122411
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/workers/patchpoint.db" "SELECT COUNT(*) FROM login_failures WHERE username = 'qa.final.9943bd.mp2'"
+5
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18101; u=qa.final.$SFX.mp3; req POST /api/auth/register --data-binary @$RUN/reg.$u.json | cut -d' ' -f1; wave be06r3; summary be06r3
+201
+      5 401
+     15 429
+      5 Invalid username or password
+     15 Too many failed login attempts. Try again later.
+p50=0.002755 p95=0.103296 max=0.117915
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/workers/patchpoint.db" "SELECT COUNT(*) FROM login_failures WHERE username = 'qa.final.9943bd.mp3'"
+5
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18101; u=qa.final.$SFX.mp4; req POST /api/auth/register --data-binary @$RUN/reg.$u.json | cut -d' ' -f1; wave be06r4; summary be06r4
+201
+      5 401
+     15 429
+      5 Invalid username or password
+     15 Too many failed login attempts. Try again later.
+p50=0.002309 p95=0.110036 max=0.113340
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/workers/patchpoint.db" "SELECT COUNT(*) FROM login_failures WHERE username = 'qa.final.9943bd.mp4'"
+5
+[exit code: 0]
+
+## BE-07
+
+$ BASE=http://127.0.0.1:18100; req GET /api/auth/me -b $RUN/helpdesk.jar; jq -c "{username,role}" $RUN/last.body
+200 0.001918
+{"username":"helpdesk","role":"agent"}
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18100; for spec in "GET /api/users -" "POST /api/users be07.empty.req" "PATCH /api/users/1 be07.role.req" "DELETE /api/users/2 -" "POST /api/auth/password be07.empty.req" "POST /api/auth/password-reset be07.empty.req" "POST /api/auth/logout-all -" "DELETE /api/auth/sessions -"; do set -- $spec; if [ "$3" = - ]; then st=$(req $1 $2 -b $RUN/helpdesk.jar); else st=$(req $1 $2 --data-binary @$RUN/$3 -b $RUN/helpdesk.jar); fi; echo "$1 $2 -> $st $(jq -c . $RUN/last.body)"; done
+GET /api/users -> 404 0.000804 {"detail":"Not Found"}
+POST /api/users -> 404 0.000839 {"detail":"Not Found"}
+PATCH /api/users/1 -> 404 0.000888 {"detail":"Not Found"}
+DELETE /api/users/2 -> 404 0.000866 {"detail":"Not Found"}
+POST /api/auth/password -> 404 0.000814 {"detail":"Not Found"}
+POST /api/auth/password-reset -> 404 0.000828 {"detail":"Not Found"}
+POST /api/auth/logout-all -> 404 0.000809 {"detail":"Not Found"}
+DELETE /api/auth/sessions -> 404 0.000801 {"detail":"Not Found"}
+[exit code: 0]
+
+# edge a)
+$ BASE=http://127.0.0.1:18100; u=qa.final.$SFX.escalate; req POST /api/auth/register --data-binary @$RUN/be07.esc.req; jq -c "{detail: [.detail[] | {type, loc, msg}]}" $RUN/last.body
+422 0.001344
+{"detail":[{"type":"extra_forbidden","loc":["body","role"],"msg":"Extra inputs are not permitted"}]}
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/dev/patchpoint.db" "SELECT COUNT(*) FROM users WHERE username = 'qa.final.9943bd.escalate'"
+0
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/dev/patchpoint.db" "SELECT username FROM users WHERE role = 'agent'"
+helpdesk
+[exit code: 0]
+
+$ grep -nE "include_router" backend/app/main.py
+106:    app.include_router(health.router)
+107:    app.include_router(auth.router)
+108:    app.include_router(tickets.router)
+[exit code: 0]
+
+## BE-08
+
+$ BASE=http://127.0.0.1:18100; u=qa.final.$SFX.multi; req POST /api/auth/register --data-binary @$RUN/reg.$u.json; req POST /api/auth/login --data-binary @$RUN/login.$u.json -c $RUN/multiA.jar; req POST /api/auth/login --data-binary @$RUN/login.$u.json -c $RUN/multiB.jar
+201 0.037763
+200 0.037374
+200 0.036283
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/dev/patchpoint.db" "SELECT COUNT(*) FROM sessions s JOIN users u ON u.id = s.user_id WHERE u.username = 'qa.final.$SFX.multi'"
+2
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18100; req POST /api/auth/logout -b $RUN/multiA.jar; jq -c . $RUN/last.body
+200 0.001689
+{"message":"Logged out"}
+[exit code: 0]
+
+$ BASE=http://127.0.0.1:18100; req GET /api/auth/me -b $RUN/multiA.jar; jq -c . $RUN/last.body; req GET /api/auth/me -b $RUN/multiB.jar; jq -c "{username,role}" $RUN/last.body
+401 0.001628
+{"detail":"Not authenticated"}
+200 0.001532
+{"username":"qa.final.9943bd.multi","role":"employee"}
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/dev/patchpoint.db" "SELECT COUNT(*) FROM sessions s JOIN users u ON u.id = s.user_id WHERE u.username = 'qa.final.$SFX.multi'"
+1
+[exit code: 0]
+
+# edge a)
+$ BASE=http://127.0.0.1:18100; req POST /api/auth/logout; jq -c . $RUN/last.body
+200 0.001286
+{"message":"Logged out"}
+[exit code: 0]
+
+## End-state checks
+$ grep -c internal_error "$RUN/dev/api.log"; grep -c internal_error "$RUN/workers/api.log" || true
+3
+0
+[exit code: 0]
+
+$ sqlite3 -readonly "$RUN/dev/patchpoint.db" "SELECT COUNT(*) FROM users; SELECT COUNT(*) FROM tickets"
+49
+53
+[exit code: 0]
+
+## Underlying exception of the BE-05 internal_error lines (read from the dev API log after the scenarios)
+
+$ grep -A5 "^Traceback" "$RUN/dev/api.log" | grep -E "database.py|conn.commit|sqlite3.OperationalError" | sort | uniq -c
+      3     conn.commit()
+      3   File "/home/lex/Projects/patchpoint/backend/app/database.py", line 158, in transaction
+      3 sqlite3.OperationalError: database is locked
+[exit code: 0]
+
+$ grep -c "sqlite3.OperationalError: database is locked" "$RUN/dev/api.log"
+3
+[exit code: 0]
+
+$ grep -n "Started server process" "$RUN/workers/api.log" | wc -l; grep -n "Started server process" "$RUN/dev/api.log" "$RUN/docs/api.log" | wc -l
+4
+2
+[exit code: 0]
+
+## Stop of the instances and cleanup
+
+$ kill -TERM -- "-$(cat "$RUN/dev/pgid")"   # also for workers and docs
+kill: -<PGID>: failed to send signal to process   (3 times)
+[exit code: 1]
+
+# `$!` was not the PGID in this run (setsid forked), so the three process groups were read with `ps -o pgid= -p <pid of "uv run uvicorn …">` (419644, 419651, 419657) and stopped:
+$ kill -TERM -- "-<PGID>"   # once per instance
+[exit code: 0]
+
+$ ss -ltn | grep -E ':1810[0-2]\b' || echo 'no listeners on 18100-18102'
+no listeners on 18100-18102
+[exit code: 0]
+
+$ docker ps --format '{{.Names}}' | grep -E '^(patchpoint-final-|patchpoint-smoke|pp-ansible-target|pp-verify-)' || echo 'no leftover test containers'
+no leftover test containers
+[exit code: 0]
+
+$ docker ps --format '{{.Names}} {{.Status}}' | grep -E '^patchpoint-(api|proxy)-1'
+patchpoint-api-1 Up 10 hours (healthy)
+patchpoint-proxy-1 Up 10 hours (healthy)
+[exit code: 0]
+

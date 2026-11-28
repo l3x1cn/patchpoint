@@ -18,7 +18,7 @@ from app.database import (
 )
 from app.main import create_app
 from app.security import hash_password, password_policy_violation, verify_password
-from tests.support import DEFAULT_PASSWORD
+from tests.support import DEFAULT_PASSWORD, UserFactory
 
 
 def count_all_users(database_path: Path) -> int:
@@ -124,3 +124,31 @@ def test_transaction_rolls_back_after_failed_commit(tmp_path: Path) -> None:
 
     assert row is not None
     assert row["n"] == 0
+
+
+def test_database_uses_wal_journal_mode(client: TestClient, settings: Settings) -> None:
+    with closing(connect(settings.database_path)) as conn:
+        row = fetch_one(conn, "PRAGMA journal_mode")
+
+    assert row is not None
+    assert row[0] == "wal"
+
+
+def test_login_is_not_blocked_by_an_external_read_transaction(
+    client: TestClient, settings: Settings, user_factory: UserFactory
+) -> None:
+    user_factory("alice")
+    reader = sqlite3.connect(settings.database_path, isolation_level=None)
+
+    try:
+        reader.execute("BEGIN")
+        reader.execute("SELECT COUNT(*) FROM users").fetchone()
+
+        response = client.post(
+            "/api/auth/login", json={"username": "alice", "password": "wrong-password"}
+        )
+    finally:
+        reader.execute("ROLLBACK")
+        reader.close()
+
+    assert response.status_code == 401
