@@ -11,8 +11,8 @@
 #    packages: write i nie wykonuje kodu z repozytorium.
 # Joby wołają cele make, które działają też lokalnie. Akcje są przypięte po pełnym SHA commita z komentarzem
 # wersji (podbija je Dependabot); skanery działają z obrazów przypiętych po digeście (scripts/scan.sh), bez
-# akcji Trivy z Marketplace (CVE-2026-33634). Repozytorium jest prywatne bez GitHub Advanced Security, więc
-# SARIF trafia do artefaktów, nie do code scanning. Wartości z kontekstów GitHuba trafiają do poleceń
+# akcji Trivy z Marketplace (CVE-2026-33634). SARIF trafia do artefaktów przebiegu; potok nie wysyła go do
+# code scanning. Wartości z kontekstów GitHuba trafiają do poleceń
 # wyłącznie przez env, nigdy przez wyrażenia w treści run.
 name: CI
 

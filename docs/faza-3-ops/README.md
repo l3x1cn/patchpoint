@@ -262,12 +262,24 @@ Odnowienie certyfikatu jest automatyczne (`certbot.timer` i hook wdrożenia). Pl
 Kopia zapasowa bazy SQLite jest ręczna; spójną kopię daje API `backup` biblioteki `sqlite3` wykonane w kontenerze, a plik pobiera `docker compose cp`:
 
 ```bash
-docker compose --project-directory /opt/patchpoint exec -T api python -c "import sqlite3; s = sqlite3.connect('/data/patchpoint.db'); d = sqlite3.connect('/data/backup.db'); s.backup(d); d.close(); s.close()"
+docker compose --project-directory /opt/patchpoint exec -T api python -c "import sqlite3; s = sqlite3.connect('/data/patchpoint.db'); d = sqlite3.connect('/data/backup.db'); s.backup(d); d.execute('PRAGMA journal_mode = DELETE'); d.close(); s.close()"
 docker compose --project-directory /opt/patchpoint cp api:/data/backup.db ./patchpoint-$(date +%F).db
 docker compose --project-directory /opt/patchpoint exec -T api python -c "import os; os.remove('/data/backup.db')"
 ```
 
-Kopię przechowuj poza serwerem. Procedura odtwarzania nie została opisana ani sprawdzona.
+Kopię przechowuj poza serwerem. Polecenie `PRAGMA journal_mode = DELETE` jest potrzebne, bo kopia dziedziczy tryb WAL bazy źródłowej, a plik w trybie WAL nie otwiera się tylko do odczytu z niezapisywalnego katalogu.
+
+Odtworzenie z kopii (procedurę sprawdzono lokalnie w scenariuszu OPS-10 [raportu testów końcowych](../testing/reports/2026-11-27-patchpoint-final-report.md)). Wolumen jest usuwany, żeby obok odtworzonego pliku nie zostały pliki dziennika bieżącej bazy (`-journal`, `-wal`, `-shm`):
+
+```bash
+docker compose --project-directory /opt/patchpoint down
+docker volume rm patchpoint_api-data
+install -d -m 0755 /tmp/patchpoint-restore
+install -m 0644 ./patchpoint-RRRR-MM-DD.db /tmp/patchpoint-restore/patchpoint.db
+docker compose --project-directory /opt/patchpoint run --rm --no-deps -T -v /tmp/patchpoint-restore:/restore:ro --entrypoint python api -c "import shutil; shutil.copyfile('/restore/patchpoint.db', '/data/patchpoint.db')"
+rm -rf /tmp/patchpoint-restore
+docker compose --project-directory /opt/patchpoint up -d --wait --wait-timeout 180
+```
 
 ## 11. Realizacja przekazania z Fazy 2
 
@@ -316,16 +328,16 @@ QA i końcowy code review działają po tym dokumencie, w procesie delivery; ich
 - Docker Engine, containerd i runc pochodzą z `download.docker.com`, a ich poprawki dostarcza wyłącznie `unattended-upgrades` ze źródłem `origin=Docker,label=Docker CE` (`/etc/apt/apt.conf.d/52patchpoint-docker`). Nazwy `Docker` i `Docker CE` wywnioskowano z pliku `Release` repozytorium i nie sprawdzono ich na serwerze docelowym (`apt-cache policy`); po pierwszym wdrożeniu potwierdź je poleceniem `unattended-upgrade --dry-run --debug`. Poprawka wydana po wdrożeniu trafia na host dopiero przy kolejnym przebiegu `unattended-upgrades`, a luka w runc lub containerd wykorzystana z kontenera proxy (zapisywalny system plików, wyjście do Internetu) daje root na hoście. Aktualizacja demona restartuje go, a `live-restore` utrzymuje kontenery.
 - Obraz proxy z 2026-11-16 (nginx 1.30.6) miał sześć CVE objętych wyjątkami w `.trivyignore`, w tym CVE-2026-118899 (DoS przez TLS 1.3, dotyczący tej konfiguracji). Podbicie do tagu `4.30.0-nginx-alpine-202611271111` (nginx 1.30.8-r1) usunęło je, a wpisy skasowano. Ograniczenie zostaje ogólne: proces nginx w nieskończonej pętli nie kończy się, więc `restart: unless-stopped` nie wyprowadzi kontenera z takiego stanu, a HEALTHCHECK tylko oznacza go jako `unhealthy` (usługę przywraca ręczny `docker compose restart proxy`). Wyłączenie HTTP/2 oznacza, że klienci używają HTTP/1.1.
 - Dostęp do Dockera oznacza root; `env_file` jest widoczny w `docker inspect`; token GHCR leży w `/root/.docker/config.json` (base64).
-- Tagi `sha-<7>` w GHCR są zmienne: ponowne uruchomienie przebiegu dla tego samego commita buduje obraz od nowa (`apt-get upgrade` zależy od dnia budowy) i nadpisuje tag, a każdy, kto ma `packages: write`, może go podmienić. Job `publish` zapisuje digesty wysłanych obrazów w podsumowaniu przebiegu, a rola `patchpoint` wdraża po digeście, gdy podano `patchpoint_api_digest` i `patchpoint_proxy_digest`; bez nich (wariant po tagu) serwer nie sprawdza, że obraz jest tym, który przeszedł bramki, a wycofanie po tagu może uruchomić inny obraz. Odczyt digestu przez `docker buildx imagetools inspect` w `publish` i wdrożenie po digeście nie zostały sprawdzone na GHCR ani na serwerze (publikacja możliwa dopiero po scaleniu do `main`). Podpis cosign obrazów i jego weryfikacja przed wdrożeniem nie są wdrożone.
+- Tagi `sha-<7>` w GHCR są zmienne: ponowne uruchomienie przebiegu dla tego samego commita buduje obraz od nowa (`apt-get upgrade` zależy od dnia budowy) i nadpisuje tag, a każdy, kto ma `packages: write`, może go podmienić. Job `publish` zapisuje digesty wysłanych obrazów w podsumowaniu przebiegu, a rola `patchpoint` wdraża po digeście, gdy podano `patchpoint_api_digest` i `patchpoint_proxy_digest`; bez nich (wariant po tagu) serwer nie sprawdza, że obraz jest tym, który przeszedł bramki, a wycofanie po tagu może uruchomić inny obraz. Odczyt digestu przez `docker buildx imagetools inspect` w `publish` zadziałał w przebiegu `44694936930` na `main` (job `publish` `success`, [`dowody/ci.md`](dowody/ci.md)); wdrożenia po digeście nie sprawdzono na serwerze. Podpis cosign obrazów i jego weryfikacja przed wdrożeniem nie są wdrożone.
 - Playbook Ansible nie został uruchomiony na serwerze (nie sprawdzono wystawienia certyfikatu Let's Encrypt, zapory ani wdrożenia). Uwagi z przeglądu (kolejność handlerów `Przeładuj konfigurację systemd` i `Przeładuj nftables` oraz brak prefiksu `-` przy `ExecStop` w drop-inie nftables) poprawiono 2026-11-27 w `roles/base`; poprawka nie była testowana na serwerze, sprawdzono tylko `ansible-lint` i `--syntax-check`.
 - Brak IPv6: rekord AAAA, IPv6 w sieciach Dockera; `userland-proxy: false` zakłada IPv4.
 - WAF na poziomie paranoi 1: możliwe fałszywe alarmy i obejścia; hasła z logowania i rejestracji są wyłączone z analizy. Reguły 920350 i 920180 razem blokują żądania `POST` bez treści wysyłane na numeryczny adres IP w `Host` (klienci powinni używać nazwy domeny).
 - Limit per IP nie zatrzymuje ataku rozproszonego.
 - Aplikacja nie ma zmiany ani resetu hasła, a hasło zapisane w bazie zmienia się wyłącznie przez usunięcie danych (`docker compose --project-directory /opt/patchpoint down -v` usuwa wolumen `api-data` razem ze wszystkimi kontami i zgłoszeniami). Po wycieku hasła kont demo stare hasło działa więc nadal na istniejącej bazie dla wszystkich kont demo, także dla konta agenta `helpdesk`, które powstaje tylko z danych początkowych. W produkcji `patchpoint_seed_demo_data` pozostaje domyślnie `false`, więc kont demo nie ma.
-- Brak centralnych logów i alertów; kopie zapasowe wykonuje się ręcznie, a odtwarzanie nie jest opisane.
+- Brak centralnych logów i alertów; kopie zapasowe i odtwarzanie wykonuje się ręcznie (procedury w sekcji 10).
 - Obraz API zależy od dnia budowy (`apt-get upgrade`). Plik `/app/.venv/.lock` w obrazie API jest pustym plikiem zapisywalnym dla wszystkich (pozostałość po uv); w kontenerze z `read_only: true` nie ma to praktycznego znaczenia.
 - Nie sprawdzono podpisu cosign obrazu CRS ani obsługi `uv.lock` i digestów przez Dependabot.
-- Publikacja w GHCR (`publish`) zostanie sprawdzona dopiero po scaleniu do `main`.
+- Publikację w GHCR sprawdził przebieg `44694936930` z 2026-11-20; obrazy z poprawek testów końcowych trafią do GHCR dopiero po scaleniu do `main`.
 - Lokalnie port 8080 bywa zajęty przez inne projekty; zmiana portu wymaga ustawienia `PATCHPOINT_HTTP_BIND` razem z `PATCHPOINT_PUBLIC_ORIGINS`, bo API zwraca 403 `Origin not allowed` dla originu spoza tej listy (konfiguracja QA używa stosu na 8080).
 - Pozostałe ryzyka Fazy 2 bez zmian: sekcja 9 [raportu Fazy 2](../faza-2-sec/README.md) (zob. też tabela w sekcji 11).
 
@@ -342,6 +354,6 @@ QA i końcowy code review działają po tym dokumencie, w procesie delivery; ich
 | GHCR | ECR (skanowanie, niezmienne tagi) |
 | certbot | ACM |
 | `json-file` | CloudWatch Logs z filtrami metryk i alarmami na `patchpoint.security` |
-| wolumen SQLite | EFS z jednym zadaniem albo RDS for PostgreSQL |
+| wolumen SQLite | RDS for PostgreSQL (EFS wymagałby `journal_mode=DELETE`, bo SQLite w trybie WAL nie działa na systemach plików sieciowych) |
 
 SQLite ogranicza wdrożenie do jednej instancji API, a skalowanie poziome w chmurze wymaga migracji danych do RDS for PostgreSQL (poza zakresem Fazy 3).
