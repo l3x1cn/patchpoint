@@ -1,5 +1,6 @@
 import hashlib
 import secrets
+import threading
 from typing import Final
 
 from argon2 import PasswordHasher
@@ -8,20 +9,29 @@ from argon2.exceptions import InvalidHashError, VerificationError
 PASSWORD_MIN_LENGTH: Final = 15
 PASSWORD_MAX_LENGTH: Final = 128
 
+# The default argon2-cffi PasswordHasher uses 64 MiB per call, so 4 concurrent calls take 256 MiB,
+# below the API's `mem_limit: 1g` in compose.yaml. Further requests wait in their own worker
+# thread, not in the event loop.
+PASSWORD_HASH_CONCURRENCY: Final = 4
+
 _password_hasher: Final = PasswordHasher()
+_hash_slots: Final = threading.BoundedSemaphore(PASSWORD_HASH_CONCURRENCY)
+
 # Verified for unknown logins so that response time does not reveal whether an account exists.
 _DUMMY_PASSWORD_HASH: Final = _password_hasher.hash(secrets.token_urlsafe(16))
 
 
 def hash_password(password: str) -> str:
-    return _password_hasher.hash(password)
+    with _hash_slots:
+        return _password_hasher.hash(password)
 
 
 def verify_password(password: str, stored_hash: str) -> bool:
-    try:
-        return _password_hasher.verify(stored_hash, password)
-    except (VerificationError, InvalidHashError):
-        return False
+    with _hash_slots:
+        try:
+            return _password_hasher.verify(stored_hash, password)
+        except (VerificationError, InvalidHashError):
+            return False
 
 
 def simulate_password_check(password: str) -> None:

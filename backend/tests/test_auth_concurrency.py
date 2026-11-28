@@ -1,5 +1,7 @@
 import threading
+import time
 from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any
 
 import anyio
@@ -9,11 +11,15 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from httpx2 import ASGITransport, AsyncClient
 
+from app import security
 from app.config import Settings
 from app.routers import auth as auth_router
 from app.security import verify_password
 from tests.support import API_BASE_URL, DEFAULT_PASSWORD, UserFactory
 
+HASH_CALLERS = 12
+HASH_CALLS = 6
+HASH_DURATION_SECONDS = 0.05
 WORKER_WAIT_SECONDS = 5.0
 CONCURRENT_GUESSES = 20
 
@@ -135,3 +141,46 @@ async def test_concurrent_wrong_guesses_cannot_exceed_lockout(
         (("detail", "Invalid username or password"),)
     }
     assert correct.status_code == 429
+
+
+class SlowPasswordHasher:
+    """Fake Argon2 hasher that records the highest number of simultaneous calls."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._running = 0
+        self.max_seen = 0
+
+    def _work(self) -> None:
+        with self._lock:
+            self._running += 1
+            self.max_seen = max(self.max_seen, self._running)
+        time.sleep(HASH_DURATION_SECONDS)
+        with self._lock:
+            self._running -= 1
+
+    def hash(self, password: str) -> str:
+        self._work()
+        return "$argon2id$fake"
+
+    def verify(self, stored_hash: str, password: str) -> bool:
+        self._work()
+        return True
+
+
+def test_password_hashing_concurrency_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = SlowPasswordHasher()
+    monkeypatch.setattr(security, "_password_hasher", fake)
+
+    with ThreadPoolExecutor(max_workers=HASH_CALLERS) as pool:
+        futures: list[Future[object]] = [
+            pool.submit(security.hash_password, "secret") for _ in range(HASH_CALLS)
+        ]
+        futures += [
+            pool.submit(security.verify_password, "secret", "$argon2id$fake")
+            for _ in range(HASH_CALLS)
+        ]
+        for future in futures:
+            future.result()
+
+    assert 2 <= fake.max_seen <= security.PASSWORD_HASH_CONCURRENCY
