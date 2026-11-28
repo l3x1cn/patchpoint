@@ -19,7 +19,7 @@ install:
 	cd $(BACKEND) && uv sync
 
 run:
-	cd $(BACKEND) && uv run uvicorn app.main:app --host $(API_HOST) --port $(API_PORT) --no-proxy-headers
+	cd $(BACKEND) && uv run uvicorn app.main:app --host $(API_HOST) --port $(API_PORT) --workers 1 --no-proxy-headers
 
 test:
 	cd $(BACKEND) && uv run pytest

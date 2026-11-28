@@ -40,6 +40,7 @@ cleanup() {
     kill "$LOGS_PID" 2>/dev/null
   fi
   docker rm -f "$API_CONTAINER" >/dev/null 2>&1
+  docker rm -f patchpoint-smoke-workers >/dev/null 2>&1
   docker compose -p "$SMOKE_PROJECT" down -v >/dev/null 2>&1
   rm -rf "$WORK"
 }
@@ -91,6 +92,25 @@ if docker run --rm --entrypoint python "$PATCHPOINT_API_IMAGE" -c 'import import
   ok "obraz API nie zawiera pip"
 else
   bad "obraz API zawiera pip"
+fi
+
+# Blokada logowania i zapisy SQLite zakładają jeden proces z jedną pętlą zdarzeń (backend/app/routers/auth.py:
+# odczyt licznika i zapis próby bez await), a uvicorn czyta WEB_CONCURRENCY jako liczbę workerów.
+docker run -d --name patchpoint-smoke-workers --no-healthcheck --read-only --tmpfs /tmp \
+  -e WEB_CONCURRENCY=4 -e PATCHPOINT_DATABASE_PATH=/tmp/workers.db \
+  "$PATCHPOINT_API_IMAGE" >/dev/null || die "nie udało się uruchomić kontenera patchpoint-smoke-workers"
+for _ in $(seq 1 30); do
+  if docker logs patchpoint-smoke-workers 2>&1 | grep -q 'Uvicorn running on'; then
+    break
+  fi
+  sleep 1
+done
+count=$(docker top patchpoint-smoke-workers -o pid 2>/dev/null | tail -n +2 | wc -l) || count=0
+docker rm -f patchpoint-smoke-workers >/dev/null 2>&1 || true
+if [[ "$count" -eq 1 ]]; then
+  ok "obraz API uruchamia jeden proces uvicorn także przy WEB_CONCURRENCY=4"
+else
+  bad "obraz API: $count procesów przy WEB_CONCURRENCY=4, oczekiwano 1"
 fi
 
 # --- Część 2. Kontener API i PoC bezpieczeństwa ----------------------------------
