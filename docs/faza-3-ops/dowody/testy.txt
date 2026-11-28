@@ -5,18 +5,18 @@ rootdir: /home/lex/Projects/patchpoint/backend
 configfile: pyproject.toml
 testpaths: tests
 plugins: cov-7.1.0, anyio-4.16.0
-collected 145 items
+collected 148 items
 
-tests/test_auth.py .............................                         [ 20%]
-tests/test_auth_concurrency.py ....                                      [ 22%]
+tests/test_auth.py .............................                         [ 19%]
+tests/test_auth_concurrency.py .....                                     [ 22%]
 tests/test_client_ip.py .                                                [ 23%]
-tests/test_cookie_name.py ........                                       [ 28%]
+tests/test_cookie_name.py ........                                       [ 29%]
 tests/test_cors.py ..........                                            [ 35%]
-tests/test_database.py .............                                     [ 44%]
-tests/test_errors.py ...                                                 [ 46%]
-tests/test_health.py .                                                   [ 47%]
-tests/test_platform.py ...........                                       [ 55%]
-tests/test_sessions.py ........                                          [ 60%]
+tests/test_database.py ...............                                   [ 45%]
+tests/test_errors.py ...                                                 [ 47%]
+tests/test_health.py .                                                   [ 48%]
+tests/test_platform.py ...........                                       [ 56%]
+tests/test_sessions.py ........                                          [ 61%]
 tests/test_ticket_security.py ........................                   [ 77%]
 tests/test_tickets.py .................................                  [100%]
 
@@ -28,7 +28,7 @@ Name                      Stmts   Miss  Cover   Missing
 app/__init__.py               0      0   100%
 app/audit.py                 18      0   100%
 app/config.py                37      0   100%
-app/database.py             111      5    95%   128-129, 136-137, 191
+app/database.py             113      5    96%   131-132, 139-140, 194
 app/dependencies.py          35      0   100%
 app/main.py                  51      1    98%   48
 app/middleware.py            39      0   100%
@@ -37,9 +37,9 @@ app/routers/auth.py          61      2    97%   61, 73
 app/routers/health.py         9      0   100%
 app/routers/tickets.py       78      1    99%   255
 app/schemas.py               66      0   100%
-app/security.py              30      0   100%
+app/security.py              35      0   100%
 app/sessions.py              59      1    98%   94
 -------------------------------------------------------
-TOTAL                       594     10    98%
-Required test coverage of 80% reached. Total coverage: 98.32%
-============================= 145 passed in 12.93s =============================
+TOTAL                       601     10    98%
+Required test coverage of 80% reached. Total coverage: 98.34%
+============================= 148 passed in 13.81s =============================

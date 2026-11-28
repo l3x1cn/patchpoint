@@ -253,7 +253,7 @@ ansible-playbook site.yml --tags deploy \
 ansible-playbook site.yml --tags deploy -e patchpoint_image_tag=sha-<tag> --ask-vault-pass
 ```
 
-Odnowienie certyfikatu jest automatyczne (`certbot.timer` i hook wdrożenia). Playbook sprawdzono wyłącznie przez `ansible-lint` w profilu `production` i `ansible-playbook --syntax-check` ([`dowody/ansible-lint.txt`](dowody/ansible-lint.txt)); nie został uruchomiony na serwerze, więc wystawienie certyfikatu Let's Encrypt i działanie zapory na prawdziwym hoście nie są sprawdzone.
+Odnowienie certyfikatu jest automatyczne (`certbot.timer` i hook wdrożenia). Role `base` i `docker` sprawdzono na jednorazowym kontenerze systemd z Debianem 13 (OPS-17 w [raporcie testów końcowych](../testing/reports/2026-11-27-patchpoint-final-report.md)): kolejność handlerów, `ExecStop=-`, reguły Dockera po restarcie nftables, SSH, zaporę i idempotencję. Rola `patchpoint` (GHCR, wdrożenie) i `letsencrypt` nie były uruchamiane; całość sprawdzono dodatkowo przez `ansible-lint` w profilu `production` i `ansible-playbook --syntax-check` ([`dowody/ansible-lint.txt`](dowody/ansible-lint.txt)). Na prawdziwym serwerze playbook nie był uruchamiany, więc wystawienie certyfikatu Let's Encrypt i wdrożenie obrazów nie są sprawdzone.
 
 ## 10. Logi, monitoring i kopie zapasowe
 
@@ -301,27 +301,27 @@ Pozycje pochodzą z sekcji 9 [raportu Fazy 2](../faza-2-sec/README.md).
 | Konta agentów | bez zmian | — |
 | Safari | nieistotne w produkcji: produkcja działa po HTTPS, więc `Secure` jest przyjmowane | — |
 | Ciasteczko sesji nie jest izolowane portem (SEC-001) | zrealizowane po stronie serwera: jeden origin, dedykowana domena, ciasteczko `__Host-session` (smoke); zachowanie w przeglądarce nie jest objęte dowodami tego dokumentu | sekcja 6 |
-| Hashowanie Argon2 poza pętlą zdarzeń (PERF-001) | częściowo: limit żądań dla logowania i rejestracji oraz `mem_limit` kontenera API | sekcje 5 i 6 |
+| Hashowanie Argon2 poza pętlą zdarzeń (PERF-001) | zrealizowane: Argon2 poza pętlą zdarzeń i najwyżej 4 równoległe obliczenia (`PASSWORD_HASH_CONCURRENCY` w `backend/app/security.py`), poniżej `mem_limit` API; limit żądań dla logowania i rejestracji | sekcje 5 i 6 |
 | Luki w testach zdarzeń | bez zmian | — |
 
 ## 12. Weryfikacja
 
-Wyniki z plików w [`dowody/`](dowody/README.md), zebrane po zadaniach 1–8:
+Wyniki z plików w [`dowody/`](dowody/README.md), zebrane po zadaniach 1–8 i odświeżone 2026-11-28 po poprawkach z testów końcowych (zadania 7–9; scenariusz OPS-01 w [raporcie z ponownych testów](../testing/evidence/2026-11-27-patchpoint-final/results-retest.md)):
 
-- Testy ([`dowody/testy.txt`](dowody/testy.txt)): 145 zaliczonych, 0 niezaliczonych; pokrycie `TOTAL` 98% (98,32%, próg 80%); w tym testy nazwy ciasteczka `backend/tests/test_cookie_name.py`.
-- Jakość ([`dowody/jakosc.txt`](dowody/jakosc.txt)): `make lint` — „All checks passed!” i „29 files already formatted”; `make typecheck` — „Success: no issues found in 29 source files”.
-- Semgrep ([`dowody/semgrep.txt`](dowody/semgrep.txt)): 275 reguł na 71 plikach, 0 znalezisk.
-- Trivy repozytorium ([`dowody/trivy-fs.txt`](dowody/trivy-fs.txt)): 0 podatności w `backend/uv.lock`, 0 błędów konfiguracji w obu Dockerfile, brak sekretów (bramka HIGH i CRITICAL bez znalezisk).
-- Trivy obrazów ([`dowody/trivy-obrazy.txt`](dowody/trivy-obrazy.txt)): stan z 2026-11-27: `brak znalezisk HIGH i CRITICAL` dla obrazu API (Debian 13.8) i proxy (Alpine 3.24.4, nginx 1.30.8) bez żadnych wyjątków w `.trivyignore`. Wcześniejszy stan z 2026-11-19 (nginx 1.30.6 z sześcioma wyjątkami) potwierdzał przebieg CI `44520467614` ([`dowody/ci.md`](dowody/ci.md)).
-- Smoke obrazów i stosu ([`dowody/smoke-stosu.txt`](dowody/smoke-stosu.txt)): 28 kontroli `[OK]`, 0 `[BŁĄD]`, w tym PoC z Fazy 2 w kontenerze API (22 × `[NAPRAWIONE]`) i demo end-to-end przez proxy, odmowa dostępu do `/metrics/nginx` z neutralnym komunikatem 403 (`DEMO ZAKOŃCZONE POWODZENIEM`); ostatnia linia `STACK SMOKE ZAKOŃCZONY POWODZENIEM`.
-- Ansible ([`dowody/ansible-lint.txt`](dowody/ansible-lint.txt)): „Passed: 0 failure(s), 0 warning(s) in 28 files processed of 29 encountered. Profile 'production' was required, and it passed.”; `--syntax-check` playbooka bez błędów.
+- Testy ([`dowody/testy.txt`](dowody/testy.txt)), stan z 2026-11-28: 148 zaliczonych, 0 niezaliczonych; pokrycie `TOTAL` 98% (98,34%, próg 80%); w tym testy nazwy ciasteczka `backend/tests/test_cookie_name.py`.
+- Jakość ([`dowody/jakosc.txt`](dowody/jakosc.txt)), stan z 2026-11-28: `make lint` — „All checks passed!” i „29 files already formatted”; `make typecheck` — „Success: no issues found in 29 source files”.
+- Semgrep ([`dowody/semgrep.txt`](dowody/semgrep.txt)), stan z 2026-11-28: 275 reguł na 71 plikach, 0 znalezisk i 0 błędów (`.errors | length` = 0).
+- Trivy repozytorium ([`dowody/trivy-fs.txt`](dowody/trivy-fs.txt)), stan z 2026-11-28: 0 podatności w `backend/uv.lock` i `deploy/ansible/tools/uv.lock`, 0 błędów konfiguracji w obu Dockerfile, brak sekretów (bramka HIGH i CRITICAL bez znalezisk).
+- Trivy obrazów ([`dowody/trivy-obrazy.txt`](dowody/trivy-obrazy.txt)): stan z 2026-11-28 (obraz API zbudowany z `docker build --no-cache`): `brak znalezisk HIGH i CRITICAL` dla obrazu API (Debian 13.8) i proxy (Alpine 3.24.4, nginx 1.30.8) bez żadnych wyjątków w `.trivyignore`. Wcześniejszy stan z 2026-11-19 (nginx 1.30.6 z sześcioma wyjątkami) potwierdzał przebieg CI `44520467614` ([`dowody/ci.md`](dowody/ci.md)).
+- Smoke obrazów i stosu ([`dowody/smoke-stosu.txt`](dowody/smoke-stosu.txt)), stan z 2026-11-28: 29 kontroli `[OK]`, 0 `[BŁĄD]`, w tym PoC z Fazy 2 w kontenerze API (22 × `[NAPRAWIONE]`), jeden proces uvicorn w obrazie API także przy `WEB_CONCURRENCY=4` i demo end-to-end przez proxy, odmowa dostępu do `/metrics/nginx` z neutralnym komunikatem 403 (`DEMO ZAKOŃCZONE POWODZENIEM`); ostatnia linia `STACK SMOKE ZAKOŃCZONY POWODZENIEM`.
+- Ansible ([`dowody/ansible-lint.txt`](dowody/ansible-lint.txt)), stan z 2026-11-28: „Passed: 0 failure(s), 0 warning(s) in 28 files processed of 29 encountered. Profile 'production' was required, and it passed.”; `--syntax-check` playbooka bez błędów. Role `base` i `docker` przeszły ponadto test na kontenerze systemd z Debianem 13 (OPS-17, [raport testów końcowych](../testing/reports/2026-11-27-patchpoint-final-report.md)); rola `patchpoint` i `letsencrypt` nie były uruchamiane.
 - CI ([`dowody/ci.md`](dowody/ci.md)): zielony przebieg `44520467614` na gałęzi `delivery/faza-3-ops` (commit `26d93eb`; `success` w pięciu jobach, `publish` `skipped`) oraz dwa wcześniejsze przebiegi nieudane z poprawkami, opisane w sekcji 8.
 
 QA i końcowy code review działają po tym dokumencie, w procesie delivery; ich raporty trafiają do `docs/testing/reports/` i `docs/reviews/`.
 
 ## 13. Ryzyka rezydualne
 
-- Jeden host i brak wysokiej dostępności; SQLite z jednym procesem zapisującym (skalowanie wymaga PostgreSQL).
+- Jeden host i brak wysokiej dostępności; SQLite z jednym procesem zapisującym (skalowanie wymaga PostgreSQL). Baza działa w trybie WAL: odczyty spoza API nie blokują zapisów; zapisuje nadal jeden proces. API uruchamia jeden worker uvicorn (`--workers 1`), bo blokada logowania zakłada jedną pętlę zdarzeń.
 - Proxy ma zapisywalny system plików (ograniczenie obrazu CRS).
 - Proxy ma wyjście do Internetu przez sieć `edge`, choć go nie potrzebuje; do zablokowania regułą w łańcuchu `DOCKER-USER`.
 - Zapora hosta filtruje wyłącznie ruch przychodzący (łańcuch `input` w `deploy/ansible/roles/base/templates/nftables.conf.j2`): ruch wychodzący z hosta i z sieci `edge` nie jest filtrowany ani ograniczony do portów i celów z tabeli przepływów w sekcji 4.
@@ -329,7 +329,7 @@ QA i końcowy code review działają po tym dokumencie, w procesie delivery; ich
 - Obraz proxy z 2026-11-16 (nginx 1.30.6) miał sześć CVE objętych wyjątkami w `.trivyignore`, w tym CVE-2026-118899 (DoS przez TLS 1.3, dotyczący tej konfiguracji). Podbicie do tagu `4.30.0-nginx-alpine-202611271111` (nginx 1.30.8-r1) usunęło je, a wpisy skasowano. Ograniczenie zostaje ogólne: proces nginx w nieskończonej pętli nie kończy się, więc `restart: unless-stopped` nie wyprowadzi kontenera z takiego stanu, a HEALTHCHECK tylko oznacza go jako `unhealthy` (usługę przywraca ręczny `docker compose restart proxy`). Wyłączenie HTTP/2 oznacza, że klienci używają HTTP/1.1.
 - Dostęp do Dockera oznacza root; `env_file` jest widoczny w `docker inspect`; token GHCR leży w `/root/.docker/config.json` (base64).
 - Tagi `sha-<7>` w GHCR są zmienne: ponowne uruchomienie przebiegu dla tego samego commita buduje obraz od nowa (`apt-get upgrade` zależy od dnia budowy) i nadpisuje tag, a każdy, kto ma `packages: write`, może go podmienić. Job `publish` zapisuje digesty wysłanych obrazów w podsumowaniu przebiegu, a rola `patchpoint` wdraża po digeście, gdy podano `patchpoint_api_digest` i `patchpoint_proxy_digest`; bez nich (wariant po tagu) serwer nie sprawdza, że obraz jest tym, który przeszedł bramki, a wycofanie po tagu może uruchomić inny obraz. Odczyt digestu przez `docker buildx imagetools inspect` w `publish` zadziałał w przebiegu `44694936930` na `main` (job `publish` `success`, [`dowody/ci.md`](dowody/ci.md)); wdrożenia po digeście nie sprawdzono na serwerze. Podpis cosign obrazów i jego weryfikacja przed wdrożeniem nie są wdrożone.
-- Playbook Ansible nie został uruchomiony na serwerze (nie sprawdzono wystawienia certyfikatu Let's Encrypt, zapory ani wdrożenia). Uwagi z przeglądu (kolejność handlerów `Przeładuj konfigurację systemd` i `Przeładuj nftables` oraz brak prefiksu `-` przy `ExecStop` w drop-inie nftables) poprawiono 2026-11-27 w `roles/base`; poprawka nie była testowana na serwerze, sprawdzono tylko `ansible-lint` i `--syntax-check`.
+- Role `base` i `docker` sprawdzono na jednorazowym kontenerze systemd z Debianem 13 (OPS-17 w [raporcie testów końcowych](../testing/reports/2026-11-27-patchpoint-final-report.md)): kolejność handlerów `Przeładuj konfigurację systemd` i `Przeładuj nftables`, `ExecStop=-` w drop-inie nftables, reguły Dockera po restarcie nftables, SSH, zaporę i idempotencję drugiego przebiegu. Uwagi z przeglądu (kolejność handlerów i brak prefiksu `-` przy `ExecStop`) poprawiono 2026-11-27 w `roles/base`, a ten test je potwierdził. Role `patchpoint` (GHCR, wdrożenie) i `letsencrypt` nie były uruchamiane, więc nie sprawdzono wystawienia certyfikatu Let's Encrypt ani wdrożenia obrazów; żaden playbook nie działał na prawdziwym serwerze VPS.
 - Brak IPv6: rekord AAAA, IPv6 w sieciach Dockera; `userland-proxy: false` zakłada IPv4.
 - WAF na poziomie paranoi 1: możliwe fałszywe alarmy i obejścia; hasła z logowania i rejestracji są wyłączone z analizy. Reguły 920350 i 920180 razem blokują żądania `POST` bez treści wysyłane na numeryczny adres IP w `Host` (klienci powinni używać nazwy domeny).
 - Limit per IP nie zatrzymuje ataku rozproszonego.

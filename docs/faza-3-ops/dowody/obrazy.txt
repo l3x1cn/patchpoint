@@ -2,13 +2,13 @@ $ docker image inspect -f 'User={{.Config.User}} ExposedPorts={{json .Config.Exp
 User=10001:10001 ExposedPorts={"8000/tcp":{}} Healthcheck=["CMD","python","-c","import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4).status == 200 else 1)"]
 
 $ docker image inspect -f '{{json .Config.Labels}}' patchpoint-api:local   (tylko etykiety org.opencontainers.image.*)
-{"org.opencontainers.image.revision":"7ceb48c25e609eafdf990699e2235a52d78de77d","org.opencontainers.image.source":"https://github.com/l3x1cn/patchpoint","org.opencontainers.image.title":"patchpoint-api"}
+{"org.opencontainers.image.revision":"8fd2c1ccce5efb753641dad716579aeec4568497","org.opencontainers.image.source":"https://github.com/l3x1cn/patchpoint","org.opencontainers.image.title":"patchpoint-api"}
 
 $ docker image inspect -f 'User={{.Config.User}} ExposedPorts={{json .Config.ExposedPorts}} Healthcheck={{json .Config.Healthcheck.Test}}' patchpoint-proxy:local
 User=nginx ExposedPorts={"8080/tcp":{},"8443/tcp":{}} Healthcheck=["CMD","curl","-fsk","-o","/dev/null","https://localhost:8443/healthz"]
 
 $ docker image inspect -f '{{json .Config.Labels}}' patchpoint-proxy:local   (tylko etykiety org.opencontainers.image.*)
-{"org.opencontainers.image.created":"2026-11-23T17:12:13.224Z","org.opencontainers.image.description":"Unprivileged NGINX Dockerfiles","org.opencontainers.image.licenses":"Apache-2.0","org.opencontainers.image.revision":"7ceb48c25e609eafdf990699e2235a52d78de77d","org.opencontainers.image.source":"https://github.com/l3x1cn/patchpoint","org.opencontainers.image.title":"patchpoint-proxy","org.opencontainers.image.url":"https://github.com/nginx/docker-nginx-unprivileged","org.opencontainers.image.version":"1.30.8-alpine"}
+{"org.opencontainers.image.created":"2026-11-23T17:12:13.224Z","org.opencontainers.image.description":"Unprivileged NGINX Dockerfiles","org.opencontainers.image.licenses":"Apache-2.0","org.opencontainers.image.revision":"8fd2c1ccce5efb753641dad716579aeec4568497","org.opencontainers.image.source":"https://github.com/l3x1cn/patchpoint","org.opencontainers.image.title":"patchpoint-proxy","org.opencontainers.image.url":"https://github.com/nginx/docker-nginx-unprivileged","org.opencontainers.image.version":"1.30.8-alpine"}
 
 $ docker image ls --format '{{.Repository}}:{{.Tag}} {{.Size}}' --filter 'reference=patchpoint-*:local'
 patchpoint-api:local 254MB
